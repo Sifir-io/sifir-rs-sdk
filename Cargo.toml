@@ -9,9 +9,13 @@ edition = "2018"
 [dependencies]
 reqwest = { version="0.10.8", features = ["socks", "json"] }
 tokio = { version= "0.2", features = ["full"] }
-libtor = "44.5.1+0.4.4.5"
+libtor = { path = "libtor/libtor"}
+libtor-derive = { path = "libtor/libtor-derive"}
+libtor-sys = { path = "libtor-sys", features=["vendored-openssl"] }
+
 
 [lib]
 path= "src/lib.rs"
 name = "sifir_rs_sdk"
 crate-type = ["staticlib", "cdylib"]
+#crate-type = ["lib", "cdylib"]

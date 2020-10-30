@@ -1,12 +1,5 @@
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use std::thread::JoinHandle;
-pub struct TorService {
-    port: u16,
-    socks_port: u16,
-    data_dir: String,
-    _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
-}
-
 enum TorRequestMethod {
     Get,
     Post,
@@ -19,8 +12,15 @@ struct TorRequest {
     signature_header: String,
 }
 
+pub struct TorService {
+    port: u16,
+    socks_port: u16,
+    data_dir: String,
+    _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
+}
+
 impl TorService {
-    fn new() -> Self {
+    pub fn new() -> Self {
         TorService {
             port: 8000,
             socks_port: 19050,
@@ -59,7 +59,7 @@ impl TorService {
         }
     }
 
-    fn get_client(&self) -> Result<reqwest::Client, reqwest::Error> {
+    pub fn get_client(&self) -> Result<reqwest::Client, reqwest::Error> {
         let proxy = reqwest::Proxy::all(
             reqwest::Url::parse(format!("socks5h://127.0.0.1:{}", self.socks_port).as_str())
                 .unwrap(),
