@@ -10,7 +10,10 @@ edition = "2018"
 reqwest = { version="0.10.8", features = ["socks", "json"] }
 tokio = { version= "0.2", features = ["full"] }
 libtor = { git = "https://github.com/Sifir-io/libtor.git"}
+torut = { version = "0.1.6" , features=["vendored_openssl"] }
 
+[dev-dependencies]
+lazy_static = "1.4.0"
 
 [lib]
 path= "src/lib.rs"

@@ -1,4 +1,7 @@
+#[macro_use]
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
+use torut::control::{UnauthenticatedConn, TorAuthMethod, TorAuthData};
+use tokio::net::TcpStream;
 use std::thread::JoinHandle;
 enum TorRequestMethod {
     Get,
@@ -15,6 +18,7 @@ struct TorRequest {
 pub struct TorService {
     port: u16,
     socks_port: u16,
+    control_port: u16,
     data_dir: String,
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
 }
@@ -24,6 +28,7 @@ impl TorService {
         TorService {
             port: 8000,
             socks_port: 19050,
+            control_port: 19051,
             data_dir: String::from("/tmp/tor-rust"),
             _handle: None,
         }
@@ -34,7 +39,15 @@ impl TorService {
         service
             .flag(TorFlag::DataDirectory(data_dir.into()))
             .flag(TorFlag::SocksPort(self.socks_port))
-            .flag(TorFlag::TestSocks(libtor::TorBool::True));
+            .flag(TorFlag::TestSocks(libtor::TorBool::True))
+            // FIXME ControlPortAuto 
+            // .flag(TorFlag::ControlPortAuto)
+            .flag(TorFlag::ControlPort(self.control_port))
+            .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
+            .flag(TorFlag::ControlPortWriteToFile(format!("{}/ctl.info",data_dir)))
+            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True));
+            // .flag(TorFlag::ConfigFile(data_dir.into()));
+
         //.flag(TorFlag::HiddenServiceDir(data_dir.into()))
         //.flag(TorFlag::HiddenServiceVersion(HiddenServiceVersion::V3))
         //.flag(TorFlag::HiddenServicePort(
@@ -67,25 +80,50 @@ impl TorService {
         .unwrap();
         reqwest::Client::builder().proxy(proxy).build()
     }
+
+    pub async fn connect_to_control(&self) {
+     	let s = TcpStream::connect(&format!("127.0.0.1:{}", 47835)).await.unwrap();
+        let mut utc = UnauthenticatedConn::new(s);
+        // returns node info + cookie location ?
+        let proto_info = utc.load_protocol_info().await.unwrap();
+        // loads cookie from loaded data and build auth info
+        let auth = proto_info.make_auth_data().unwrap().unwrap();
+        utc.authenticate(&auth).await.unwrap();
+        // upgrade connection to authenticated
+        let mut ac = utc.into_authenticated().await;
+        ac.set_async_event_handler(Some(|dat| {
+            println!("async handler got {:?}",dat);
+            async move { 
+                Ok(()) 
+            }
+        }));
+        ac.take_ownership().await.unwrap()
+    }
 }
 #[cfg(test)]
 mod tests {
+    lazy_static! {
+      static ref tor_service: TorService = TorService::new(); 
+    }
     use super::*;
 
     #[tokio::test]
-    async fn should_bootstrap_a_socksh_proxy() {
-        println!("Hello, world!");
-        let mut tor = TorService::new();
-        tor.start_service().unwrap();
-        println!("Tor servicce started");
-        let client = tor.get_client().unwrap();
+    async fn should_be_able_to_get_a_client_and_GET_onion() {
+        let service = &*tor_service;
+        let client = service.get_client().unwrap();
         let resp = client
             .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
             .send()
             .await.unwrap();
         println!("Call copmlete");
         println!("{:#?}", resp);
-        // tor.stop_service();
         assert_eq!(resp.status(),200);
+    }
+
+    #[tokio::test]
+    async fn should_connect_to_controlport() {
+        let service = &*tor_service;
+        let ac = service.connect_to_control().await;
+        let info = ac.get_info().await;
     }
 }
