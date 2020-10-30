@@ -9,9 +9,7 @@ edition = "2018"
 [dependencies]
 reqwest = { version="0.10.8", features = ["socks", "json"] }
 tokio = { version= "0.2", features = ["full"] }
-libtor = { path = "libtor/libtor"}
-libtor-derive = { path = "libtor/libtor-derive"}
-libtor-sys = { path = "libtor-sys", features=["vendored-openssl"] }
+libtor = { git = "https://github.com/Sifir-io/libtor.git"}
 
 
 [lib]
