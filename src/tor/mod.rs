@@ -21,16 +21,19 @@ pub struct TorService {
     control_port: u16,
     data_dir: String,
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
+    // FIXME here how do we hold a ref to the control handle ?
+    _ctl: Option<torut::control::AuthenticatedConn<TcpStream, ()>>
 }
 
 impl TorService {
     pub fn new() -> Self {
         TorService {
             port: 8000,
-            socks_port: 19050,
-            control_port: 19051,
+            socks_port: 19051,
+            control_port: 19052,
             data_dir: String::from("/tmp/tor-rust"),
             _handle: None,
+            _ctl: None
         }
     }
     pub fn start_service(&mut self) -> Result<(), libtor::Error> {
@@ -40,7 +43,7 @@ impl TorService {
             .flag(TorFlag::DataDirectory(data_dir.into()))
             .flag(TorFlag::SocksPort(self.socks_port))
             .flag(TorFlag::TestSocks(libtor::TorBool::True))
-            // FIXME ControlPortAuto 
+            // FIXME ControlPortAuto
             // .flag(TorFlag::ControlPortAuto)
             .flag(TorFlag::ControlPort(self.control_port))
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
@@ -81,8 +84,8 @@ impl TorService {
         reqwest::Client::builder().proxy(proxy).build()
     }
 
-    pub async fn connect_to_control(&self) {
-     	let s = TcpStream::connect(&format!("127.0.0.1:{}", 47835)).await.unwrap();
+    pub async fn get_bootstarp_phase(&self) -> String {
+        let s = TcpStream::connect(&format!("127.0.0.1:{}", self.control_port)).await.unwrap();
         let mut utc = UnauthenticatedConn::new(s);
         // returns node info + cookie location ?
         let proto_info = utc.load_protocol_info().await.unwrap();
@@ -93,8 +96,27 @@ impl TorService {
         let mut ac = utc.into_authenticated().await;
         ac.set_async_event_handler(Some(|dat| {
             println!("async handler got {:?}",dat);
-            async move { 
-                Ok(()) 
+            async move {
+                Ok(())
+            }
+        }));
+        self._ctl = Some(ac);
+        ac.get_info("status/bootstrap-phase").await.unwrap()
+    }
+    pub async fn take_ownership(&self) {
+     	let s = TcpStream::connect(&format!("127.0.0.1:{}", self.control_port)).await.unwrap();
+        let mut utc = UnauthenticatedConn::new(s);
+        // returns node info + cookie location ?
+        let proto_info = utc.load_protocol_info().await.unwrap();
+        // loads cookie from loaded data and build auth info
+        let auth = proto_info.make_auth_data().unwrap().unwrap();
+        utc.authenticate(&auth).await.unwrap();
+        // upgrade connection to authenticated
+        let mut ac = utc.into_authenticated().await;
+        ac.set_async_event_handler(Some(|dat| {
+            println!("async handler got {:?}",dat);
+            async move {
+                Ok(())
             }
         }));
         ac.take_ownership().await.unwrap()
@@ -102,14 +124,18 @@ impl TorService {
 }
 #[cfg(test)]
 mod tests {
-    lazy_static! {
-      static ref tor_service: TorService = TorService::new(); 
-    }
+    //lazy_static! {
+    //  static ref tor_service: TorService = TorService::new();
+    //}
     use super::*;
 
     #[tokio::test]
     async fn should_be_able_to_get_a_client_and_GET_onion() {
-        let service = &*tor_service;
+        println!("setting sevice");
+         let mut service: TorService = TorService::new();
+        service.start_service();
+        // let service = &*tor_service;
+        println!("service set copmlete");
         let client = service.get_client().unwrap();
         let resp = client
             .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
@@ -118,12 +144,10 @@ mod tests {
         println!("Call copmlete");
         println!("{:#?}", resp);
         assert_eq!(resp.status(),200);
-    }
+   // }
 
-    #[tokio::test]
-    async fn should_connect_to_controlport() {
-        let service = &*tor_service;
-        let ac = service.connect_to_control().await;
-        let info = ac.get_info().await;
+        // Tell bootstraping is done
+        let info = service.get_bootstarp_phase().await;
+        assert_eq!(info.contains("PROGRESS=100 TAG=done"),true)
     }
 }
