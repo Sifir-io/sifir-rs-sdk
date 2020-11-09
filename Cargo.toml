@@ -17,6 +17,7 @@ futures = { version = "0.3.8" }
 
 [dev-dependencies]
 lazy_static = "1.4.0"
+serial_test = "0.5.0"
 
 [lib]
 path= "src/lib.rs"

@@ -1,5 +1,6 @@
 use anyhow::Result;
 use serde::{Deserialize, Serialize};
+use serial_test::serial;
 // use std::cell::RefCell;
 // use std::future::Future;
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
@@ -8,7 +9,7 @@ use std::marker::Unpin;
 use std::pin::Pin;
 use std::thread::JoinHandle;
 use tokio::io::{AsyncRead, AsyncWrite};
-use tokio::macros::support::{Future};
+use tokio::macros::support::Future;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 
@@ -40,7 +41,11 @@ pub struct TorService {
 }
 
 trait TorServiceStatus {
-    fn wait_bootstrap_and_own(&mut self,take_ownership:Option<bool>) -> Pin<Box<dyn Future<Output = Result<bool, ()>>+ '_>>;
+    // async fns in traits are a shitshow
+    fn wait_bootstrap_and_own(
+        &mut self,
+        take_ownership: Option<bool>,
+    ) -> Pin<Box<dyn Future<Output = Result<bool, ()>> + '_>>;
     fn shutdown(self);
 }
 impl From<TorServiceParam> for TorService {
@@ -117,7 +122,6 @@ impl TorService {
         }
         ac
     }
-    pub fn drop_control_conn<S, T>(&self, conn: AuthenticatedConn<S, T>) {}
 }
 impl<F, H> TorServiceStatus for AuthenticatedConn<TcpStream, H>
 where
@@ -126,20 +130,19 @@ where
 {
     // FROM
     //https://users.rust-lang.org/t/solved-is-it-possible-to-run-async-code-in-a-trait-method-with-stdfuture-async-await/24874/2
-    fn wait_bootstrap_and_own(&mut self,take_ownership:Option<bool>) -> Pin<Box<dyn Future<Output = Result<bool, ()>> + '_>>{
+    fn wait_bootstrap_and_own(
+        &mut self,
+        take_ownership: Option<bool>,
+    ) -> Pin<Box<dyn Future<Output = Result<bool, ()>> + '_>> {
         // Wait for boostrap to be done
-        println!("FOO");
         Box::pin(async move {
             let mut input = String::new();
             while !input.trim().contains("PROGRESS=100 TAG=done") {
-                println!("FOO1");
                 input = self.get_info("status/bootstrap-phase").await.unwrap();
-                println!("INPUT {}", input);
                 std::thread::sleep(std::time::Duration::from_millis(300));
-                println!("F002");
             }
             // Default to takeownership unless expcility says no
-            if take_ownership.unwrap_or(true){
+            if take_ownership.unwrap_or(true) {
                 self.take_ownership().await;
             }
             Ok(true)
@@ -147,40 +150,13 @@ where
     }
     fn shutdown(self) {}
 }
-//
-//impl<F, I> TorService
-//where
-//    F: Fn(AsyncEvent<'static>) -> I + 'static,
-//    I: Future<Output = Result<(),ConnError>>,
-//{
-//    pub fn stop_service(&self) {
-//        match &self._handle {
-//            Some(x) => {
-//                x.join().expect("Error waiting for service thread");
-//            }
-//            None => {
-//                println!("No service detected");
-//            }
-//        }
-//    }
-//    pub async fn get_bootstarp_phase(&self) -> String {
-//        let mut ctl = self._ctl.borrow_mut();
-//        ctl.as_mut()
-//            .unwrap()
-//            .get_info("status/bootstrap-phase")
-//            .await
-//            .unwrap()
-//    }
-//    pub async fn take_ownership(&self) {
-//        let mut ctl = self._ctl.borrow_mut();
-//        ctl.as_mut().unwrap().take_ownership().await.unwrap()
-//    }
-//}
 
 #[cfg(test)]
 mod tests {
     use super::*;
+
     #[tokio::test]
+    #[serial]
     async fn get_from_param_and_await_boostrap() {
         let service: TorService = TorServiceParam {
             port: 8000,
@@ -192,10 +168,7 @@ mod tests {
         assert_eq!(service.control_port, 19052);
         assert_eq!(service._handle.is_some(), true);
         let mut control_conn = service
-            .get_control_auth_conn(Some(|event: AsyncEvent<'static>| async move {
-                println!("{:#?}", event);
-                Ok(())
-            }))
+            .get_control_auth_conn(Some(|event: AsyncEvent<'static>| async move { Ok(()) }))
             .await;
         let _ = control_conn.wait_bootstrap_and_own(Some(true)).await;
         control_conn.shutdown();
@@ -203,13 +176,14 @@ mod tests {
     }
 
     #[tokio::test]
+    #[serial]
     async fn should_get_onion_url() {
         let service: TorService = TorServiceParam {
             port: 8000,
             socks_port: Some(19051),
             data_dir: String::from("/tmp/torlib2"),
         }
-            .into();
+        .into();
         let mut control_conn = service
             .get_control_auth_conn(Some(|event: AsyncEvent<'static>| async move {
                 println!("{:#?}", event);
