@@ -79,7 +79,6 @@ impl From<TorServiceParam> for AuthenticatedConn<H,S> {
         }
     }
 }
-}
 
 // impl TorService {
 // pub fn new() -> TorService {
@@ -151,6 +150,15 @@ mod tests {
     //}
     use super::*;
 
+    fn should_get_service_from_param(){
+        let param:TorServiceParam = {     port: u8,
+            socks_port: Option<u16>,
+                data_dir: String,
+                    start_service: bool
+        };
+        let service:TorService = param.into()w
+
+    }
     #[tokio::test]
     async fn should_be_able_to_get_a_client_and_GET_onion() {
         println!("setting sevice");
