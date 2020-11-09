@@ -6,7 +6,7 @@ use std::future::Future;
 use std::thread::JoinHandle;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
-
+use tokio::
 enum TorRequestMethod {
     Get,
     Post,
@@ -18,41 +18,72 @@ struct TorRequest {
     signature_header: String,
 }
 
-type Fut = dyn Future<Output=()>;
-type RER = dyn Fn(AsyncEvent<'static>)-> Fut + 'static;
-type TorutController = AuthenticatedConn<TcpStream, Box<RER>>;
-
-
-// async fn handle_tor_async(event: AsyncEvent<'static>)-> Future<Output=Result()>{
-//     println!("async handler got {:?}", event);
-//     async move {
-//         Ok(())
-//     }
-// }
-
 // pub struct TorService
 pub struct TorService {
     port: u16,
     socks_port: u16,
-    control_port: u16,
     data_dir: String,
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
-    _ctl: RefCell<Option<TorutController>>,
+}
+
+pub struct TorServiceParam {
+    port: u8,
+    socks_port: Option<u16>,
+    data_dir: String,
+    start_service: bool
+}
+impl From<TorServiceParam> for Tor {
+    fn from(param: TorServiceParam) -> Self {
+        let mut service = Tor::new();
+        service
+            .flag(TorFlag::DataDirectory(param.data_dir.into()))
+            .flag(TorFlag::SocksPort(param.socks_port.unwrap_or(19051)))
+            // .flag(TorFlag::TestSocks(libtor::TorBool::True))
+            .flag(TorFlag::ControlPortAuto)
+            // .flag(TorFlag::ControlPort(self.control_port))
+            .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
+            .flag(TorFlag::ControlPortWriteToFile(format!(
+                "{}/ctl.info",
+                param.data_dir
+            )))
+            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True));
+
+        let handle = service.start_background();
+
+        // FIXME go get the config file from the dir
+        // save it control port etc info
+
+        Self._handle = Some(handle);
+        service
+    }
+}
+
+// How can i do tthis one too ?, H,S ?
+impl From<TorServiceParam> for AuthenticatedConn<H,S> {
+    fn from(param: TorServiceParam) -> Self {
+        // FIXME how cani do this ?
+        async {
+            let s = TcpStream::connect(&format!("127.0.0.1:{}", self.control_port))
+                .await
+                .unwrap();
+            let mut utc = UnauthenticatedConn::new(s);
+            // returns node info + cookie location ?
+            let proto_info = utc.load_protocol_info().await.unwrap();
+            // loads cookie from loaded data and build auth info
+            let auth = proto_info.make_auth_data().unwrap().unwrap();
+            utc.authenticate(&auth).await.unwrap();
+            // upgrade connection to authenticated
+            let mut ac = utc.into_authenticated().await;
+            ac.set_async_event_handler(Some(handle));
+            *self._ctl.borrow_mut() = Some(ac);
+        }
+    }
+}
 }
 
 // impl TorService {
 // pub fn new() -> TorService {
 impl TorService {
-    pub fn new() -> TorService {
-        TorService {
-            port: 8000,
-            socks_port: 19051,
-            control_port: 19052,
-            data_dir: String::from("/tmp/tor-rust"),
-            _handle: None,
-            _ctl: RefCell::new(None),
-        }
-    }
     pub fn start_service(&mut self) -> Result<()> {
         // TODO check if we already have a handle/ctl connection then error out
         let data_dir = &self.data_dir;
@@ -72,33 +103,7 @@ impl TorService {
 
         let handle = service.start_background();
         self._handle = Some(handle);
-        self.get_control_handle(Box::new(|event|{
-                                    async move {
-                                        println!("{:?}",event);
-                                    }
-                               }));
-        // TODO loop until we get 100% boostrap
-        println!("Sleeping..");
-        let ten_millis = std::time::Duration::from_secs(7);
-        std::thread::sleep(ten_millis);
         Ok(())
-    }
-
-    pub async fn get_control_handle(&mut self,handle:Box<RER>) 
-            { 
-        let s = TcpStream::connect(&format!("127.0.0.1:{}", self.control_port))
-            .await
-            .unwrap();
-        let mut utc = UnauthenticatedConn::new(s);
-        // returns node info + cookie location ?
-        let proto_info = utc.load_protocol_info().await.unwrap();
-        // loads cookie from loaded data and build auth info
-        let auth = proto_info.make_auth_data().unwrap().unwrap();
-        utc.authenticate(&auth).await.unwrap();
-        // upgrade connection to authenticated
-        let mut ac = utc.into_authenticated().await;
-        ac.set_async_event_handler(Some(handle));
-        *self._ctl.borrow_mut() = Some(ac);
     }
     pub fn get_client(&self) -> Result<reqwest::Client, reqwest::Error> {
         let proxy = reqwest::Proxy::all(
@@ -149,7 +154,7 @@ mod tests {
     #[tokio::test]
     async fn should_be_able_to_get_a_client_and_GET_onion() {
         println!("setting sevice");
-        let mut service = TorService::new();
+        let mut service = TorService::from(TorRequest);
         service.start_service();
         // let service = &*tor_service;
         println!("service set copmlete");

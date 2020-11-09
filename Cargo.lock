@@ -10,6 +10,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "anyhow"
+version = "1.0.33"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1fd36ffbb1fb7c834eac128ea8d0e310c5aeb635548f9d58861e1308d46e71c"
+
+[[package]]
 name = "arc-swap"
 version = "0.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -630,8 +636,9 @@ checksum = "2448f6066e80e3bfc792e9c98bf705b4b0fc6e8ef5b43e5889aff0eaa9c58743"
 
 [[package]]
 name = "libtor"
-version = "44.5.1+0.4.4.5"
-source = "git+https://github.com/Sifir-io/libtor.git#d34931860fe05cc1dcf56de5215a21259afb600a"
+version = "44.5.2+0.4.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "198d95bc44a34bee45caf48143a156f28d7bf9aedde7a46740734da7c9061241"
 dependencies = [
  "libtor-derive",
  "libtor-sys",
@@ -651,8 +658,9 @@ dependencies = [
 
 [[package]]
 name = "libtor-sys"
-version = "44.5.1+0.4.4.5"
-source = "git+https://github.com/Sifir-io/libtor-sys.git#c9f6e3b1edb27fe34b3bb75e2183fe558df52577"
+version = "44.5.2+0.4.4.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b924b573441ef9cd9337926d1e8a0f5b3f7c992946ad70895b02b2d8285c1488"
 dependencies = [
  "autotools",
  "cc",
@@ -1254,6 +1262,7 @@ dependencies = [
 name = "sifir-rs-sdk"
 version = "0.1.0"
 dependencies = [
+ "anyhow",
  "lazy_static",
  "libtor",
  "reqwest",
