@@ -128,7 +128,7 @@ where
     H: Fn(AsyncEvent<'static>) -> F,
     F: Future<Output = Result<(), ConnError>>,
 {
-    // FROM
+    // FIXME FROM
     //https://users.rust-lang.org/t/solved-is-it-possible-to-run-async-code-in-a-trait-method-with-stdfuture-async-await/24874/2
     fn wait_bootstrap_and_own(
         &mut self,
@@ -202,8 +202,4 @@ mod tests {
         control_conn.shutdown();
         let _ = service._handle.unwrap().join();
     }
-    // Tell bootstraping is done
-    // let info = service.get_bootstarp_phase().await;
-    // assert_eq!(info.contains("PROGRESS=100 TAG=done"), true)
-    //}
 }
