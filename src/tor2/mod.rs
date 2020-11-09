@@ -1,109 +1,95 @@
-#[macro_use]
-use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use anyhow::Result;
-use std::cell::RefCell;
-use std::future::Future;
+use serde::{Deserialize, Serialize};
+// use std::cell::RefCell;
+// use std::future::Future;
+use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use std::thread::JoinHandle;
+use tokio::macros::support::Future;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
-use tokio::
-enum TorRequestMethod {
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum TorRequestMethod {
     Get,
     Post,
 }
-struct TorRequest {
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TorRequest {
     method: TorRequestMethod,
     payload: String,
     url: String,
     signature_header: String,
 }
 
-// pub struct TorService
-pub struct TorService {
-    port: u16,
-    socks_port: u16,
-    data_dir: String,
-    _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
-}
-
+#[derive(Serialize, Deserialize, Debug)]
 pub struct TorServiceParam {
-    port: u8,
+    port: u16,
     socks_port: Option<u16>,
     data_dir: String,
-    start_service: bool
 }
-impl From<TorServiceParam> for Tor {
+
+pub struct TorService {
+    socks_port: u16,
+    control_port: u16,
+    _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
+}
+impl From<TorServiceParam> for TorService {
     fn from(param: TorServiceParam) -> Self {
         let mut service = Tor::new();
+        let socks_port = param.socks_port.unwrap_or(19051);
+        let control_port = 19052;
         service
-            .flag(TorFlag::DataDirectory(param.data_dir.into()))
-            .flag(TorFlag::SocksPort(param.socks_port.unwrap_or(19051)))
+            .flag(TorFlag::DataDirectory(param.data_dir.clone()))
+            .flag(TorFlag::SocksPort(socks_port))
             // .flag(TorFlag::TestSocks(libtor::TorBool::True))
-            .flag(TorFlag::ControlPortAuto)
-            // .flag(TorFlag::ControlPort(self.control_port))
+            // .flag(TorFlag::ControlPortAuto)
+            .flag(TorFlag::ControlPort(control_port))
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
             .flag(TorFlag::ControlPortWriteToFile(format!(
                 "{}/ctl.info",
-                param.data_dir
+                param.data_dir.clone()
             )))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True));
 
         let handle = service.start_background();
 
-        // FIXME go get the config file from the dir
+        // FIXME go get the config file from the dir once ConfigAuto is fixed
         // save it control port etc info
 
-        Self._handle = Some(handle);
-        service
-    }
-}
-
-// How can i do tthis one too ?, H,S ?
-impl From<TorServiceParam> for AuthenticatedConn<H,S> {
-    fn from(param: TorServiceParam) -> Self {
-        // FIXME how cani do this ?
-        async {
-            let s = TcpStream::connect(&format!("127.0.0.1:{}", self.control_port))
-                .await
-                .unwrap();
-            let mut utc = UnauthenticatedConn::new(s);
-            // returns node info + cookie location ?
-            let proto_info = utc.load_protocol_info().await.unwrap();
-            // loads cookie from loaded data and build auth info
-            let auth = proto_info.make_auth_data().unwrap().unwrap();
-            utc.authenticate(&auth).await.unwrap();
-            // upgrade connection to authenticated
-            let mut ac = utc.into_authenticated().await;
-            ac.set_async_event_handler(Some(handle));
-            *self._ctl.borrow_mut() = Some(ac);
+        TorService {
+            socks_port,
+            control_port,
+            _handle: Some(handle),
         }
     }
 }
 
+// How can i do tthis one too ?, H,S ?
+//impl From<TorServiceParam> for AuthenticatedConn<H,S> {
+//    fn from(param: TorServiceParam) -> Self {
+//        // FIXME how cani do this ?
+//        async {
+//            let s = TcpStream::connect(&format!("127.0.0.1:{}", self.control_port))
+//                .await
+//                .unwrap();
+//            let mut utc = UnauthenticatedConn::new(s);
+//            // returns node info + cookie location ?
+//            let proto_info = utc.load_protocol_info().await.unwrap();
+//            // loads cookie from loaded data and build auth info
+//            let auth = proto_info.make_auth_data().unwrap().unwrap();
+//            utc.authenticate(&auth).await.unwrap();
+//            // upgrade connection to authenticated
+//            let mut ac = utc.into_authenticated().await;
+//            ac.set_async_event_handler(Some(handle));
+//            *self._ctl.borrow_mut() = Some(ac);
+//        }
+//    }
+//}
+
 // impl TorService {
 // pub fn new() -> TorService {
 impl TorService {
-    pub fn start_service(&mut self) -> Result<()> {
-        // TODO check if we already have a handle/ctl connection then error out
-        let data_dir = &self.data_dir;
-        let mut service = Tor::new();
-        service
-            .flag(TorFlag::DataDirectory(data_dir.into()))
-            .flag(TorFlag::SocksPort(self.socks_port))
-            .flag(TorFlag::TestSocks(libtor::TorBool::True))
-            .flag(TorFlag::ControlPortAuto)
-            // .flag(TorFlag::ControlPort(self.control_port))
-            .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
-            .flag(TorFlag::ControlPortWriteToFile(format!(
-                "{}/ctl.info",
-                data_dir
-            )))
-            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True));
-
-        let handle = service.start_background();
-        self._handle = Some(handle);
-        Ok(())
-    }
     pub fn get_client(&self) -> Result<reqwest::Client, reqwest::Error> {
         let proxy = reqwest::Proxy::all(
             reqwest::Url::parse(format!("socks5h://127.0.0.1:{}", self.socks_port).as_str())
@@ -112,6 +98,20 @@ impl TorService {
         .unwrap();
         reqwest::Client::builder().proxy(proxy).build()
     }
+    //async fn get_control_auth_conn(&self) -> AuthenticatedConn<TcpStream, Option<None>> {
+    //    let s = TcpStream::connect(&format!("127.0.0.1:{}", self.control_port))
+    //        .await
+    //        .unwrap();
+    //    let mut utc = UnauthenticatedConn::new(s);
+    //    // returns node info + cookie location ?
+    //    let proto_info = utc.load_protocol_info().await.unwrap();
+    //    // loads cookie from loaded data and build auth info
+    //    let auth = proto_info.make_auth_data().unwrap().unwrap();
+    //    utc.authenticate(&auth).await.unwrap();
+    //    // upgrade connection to authenticated
+    //    let mut ac = utc.into_authenticated().await;
+    //    ac
+    //}
 }
 //
 //impl<F, I> TorService
@@ -145,40 +145,30 @@ impl TorService {
 
 #[cfg(test)]
 mod tests {
-    //lazy_static! {
-    //  static ref tor_service: TorService = TorService::new();
-    //}
     use super::*;
-
-    fn should_get_service_from_param(){
-        let param:TorServiceParam = {     port: u8,
-            socks_port: Option<u16>,
-                data_dir: String,
-                    start_service: bool
-        };
-        let service:TorService = param.into()w
-
-    }
     #[tokio::test]
-    async fn should_be_able_to_get_a_client_and_GET_onion() {
-        println!("setting sevice");
-        let mut service = TorService::from(TorRequest);
-        service.start_service();
-        // let service = &*tor_service;
-        println!("service set copmlete");
+    async fn should_get_service_from_param_and_get_an_onion() {
+        let service: TorService = TorServiceParam {
+            port: 8000,
+            socks_port: Some(19051),
+            data_dir: String::from("/tmp/torlib"),
+        }
+        .into();
+        assert_eq!(service.socks_port, 19051);
+        assert_eq!(service._handle.is_some(), true);
         let client = service.get_client().unwrap();
         let resp = client
             .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
             .send()
             .await
             .unwrap();
-        println!("Call copmlete");
         println!("{:#?}", resp);
         assert_eq!(resp.status(), 200);
-        // }
-
-        // Tell bootstraping is done
-        // let info = service.get_bootstarp_phase().await;
-        // assert_eq!(info.contains("PROGRESS=100 TAG=done"), true)
+        let _ = service._handle.unwrap().join();
     }
+
+    // Tell bootstraping is done
+    // let info = service.get_bootstarp_phase().await;
+    // assert_eq!(info.contains("PROGRESS=100 TAG=done"), true)
+    //}
 }
