@@ -18,7 +18,9 @@ struct TorRequest {
     signature_header: String,
 }
 
-type Fut = dyn Future<Output=()>;
+// FIXME this??
+//https://stackoverflow.com/questions/58354633/cannot-use-impl-future-to-store-async-function-in-a-vector
+type Fut = Box<dyn Future<Output=()>>;
 type RER = dyn Fn(AsyncEvent<'static>)-> Fut + 'static;
 type TorutController = AuthenticatedConn<TcpStream, Box<RER>>;
 
@@ -75,6 +77,7 @@ impl TorService {
         self.get_control_handle(Box::new(|event|{
                                     async move {
                                         println!("{:?}",event);
+                                        Ok(())
                                     }
                                }));
         // TODO loop until we get 100% boostrap
@@ -84,8 +87,8 @@ impl TorService {
         Ok(())
     }
 
-    pub async fn get_control_handle(&mut self,handle:Box<RER>) 
-            { 
+    pub async fn get_control_handle(&mut self,handle:Box<RER>)
+            {
         let s = TcpStream::connect(&format!("127.0.0.1:{}", self.control_port))
             .await
             .unwrap();
