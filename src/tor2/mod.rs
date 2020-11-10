@@ -5,27 +5,11 @@ use serial_test::serial;
 // use std::future::Future;
 use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use std::fs;
-use std::marker::Unpin;
 use std::pin::Pin;
 use std::thread::JoinHandle;
-use tokio::io::{AsyncRead, AsyncWrite};
 use tokio::macros::support::Future;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
-
-#[derive(Serialize, Deserialize, Debug)]
-pub enum TorRequestMethod {
-    Get,
-    Post,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TorRequest {
-    method: TorRequestMethod,
-    payload: String,
-    url: String,
-    signature_header: String,
-}
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TorServiceParam {
@@ -36,7 +20,7 @@ pub struct TorServiceParam {
 
 pub struct TorService {
     socks_port: u16,
-    control_port: u16,
+    control_port: String,
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
 }
 
@@ -52,43 +36,40 @@ impl From<TorServiceParam> for TorService {
     fn from(param: TorServiceParam) -> Self {
         let mut service = Tor::new();
         let socks_port = param.socks_port.unwrap_or(19051);
-        let control_port = 19052;
         service
             .flag(TorFlag::DataDirectory(param.data_dir.clone()))
             .flag(TorFlag::SocksPort(socks_port))
-            // .flag(TorFlag::TestSocks(libtor::TorBool::True))
-            // .flag(TorFlag::ControlPortAuto)
-            .flag(TorFlag::ControlPort(control_port))
+            .flag(TorFlag::ControlPortAuto)
+            // .flag(TorFlag::ControlPort(control_port))
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
             .flag(TorFlag::ControlPortWriteToFile(format!(
                 "{}/ctl.info",
-                param.data_dir.clone()
+                param.data_dir
             )))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True));
 
         let handle = service.start_background();
 
-        let mut isReady = false;
-        //while !isReady {
-        //    let contents = fs::read_to_string(format!("{}/state", param.data_dir.clone()));
-        //    match contents {
-        //        Ok(T) => {
-        //            if T.contains("CircuitBuildTimeBin") {
-        //                isReady = true;
-        //                continue;
-        //            }
-        //        }
-        //        Err(e) => {
+        let mut is_ready = false;
+        let mut control_port = String::new();
+        while !is_ready {
+            let contents = fs::read_to_string(format!("{}/ctl.info", param.data_dir.clone()));
+            match contents {
+                Ok(t) => {
+                    assert!(t.contains("PORT="));
+                    let data:Vec<&str> = t.split("PORT=").collect();
+                    control_port = data[1].into();
+                    is_ready = true;
+                }
+                Err(e) => {
 
-        //            // Try a couple of more times before stopping
-        //        }
-        //    }
-        //    std::thread::sleep(std::time::Duration::from_millis(300));
-        //}
-        // FIXME go get the config file from the dir once ConfigAuto is fixed
-        // save it control port etc info
+                    // Try a couple of more times before stopping
+                }
+            }
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
 
-        std::thread::sleep(std::time::Duration::from_millis(1000));
+            std::thread::sleep(std::time::Duration::from_millis(1000));
         TorService {
             socks_port,
             control_port,
@@ -106,7 +87,7 @@ impl TorService {
         reqwest::Client::builder().proxy(proxy).build()
     }
     async fn get_control_auth_conn<T>(&self, handle: Option<T>) -> AuthenticatedConn<TcpStream, T> {
-        let s = TcpStream::connect(&format!("127.0.0.1:{}", self.control_port))
+        let s = TcpStream::connect(self.control_port.as_str())
             .await
             .unwrap();
         let mut utc = UnauthenticatedConn::new(s);
@@ -139,15 +120,17 @@ where
             let mut input = String::new();
             while !input.trim().contains("PROGRESS=100 TAG=done") {
                 input = self.get_info("status/bootstrap-phase").await.unwrap();
-                std::thread::sleep(std::time::Duration::from_millis(300));
+                std::thread::sleep(std::time::Duration::from_millis(700));
             }
             // Default to takeownership unless expcility says no
             if take_ownership.unwrap_or(true) {
-                self.take_ownership().await;
+                self.take_ownership().await.unwrap();
             }
             Ok(true)
         })
     }
+    // dropping the control connection after having taken ownership of the node will cause the node
+    // to shutdown
     fn shutdown(self) {}
 }
 
@@ -155,33 +138,33 @@ where
 mod tests {
     use super::*;
 
-    #[tokio::test]
-    #[serial]
-    async fn get_from_param_and_await_boostrap() {
-        let service: TorService = TorServiceParam {
-            port: 8000,
-            socks_port: Some(19051),
-            data_dir: String::from("/tmp/torlib2"),
-        }
-        .into();
-        assert_eq!(service.socks_port, 19051);
-        assert_eq!(service.control_port, 19052);
-        assert_eq!(service._handle.is_some(), true);
-        let mut control_conn = service
-            .get_control_auth_conn(Some(|event: AsyncEvent<'static>| async move { Ok(()) }))
-            .await;
-        let _ = control_conn.wait_bootstrap_and_own(Some(true)).await;
-        control_conn.shutdown();
-        let _ = service._handle.unwrap().join();
-    }
+    //#[tokio::test]
+    //#[serial]
+    //async fn get_from_param_and_await_boostrap() {
+    //    let service: TorService = TorServiceParam {
+    //        port: 8000,
+    //        socks_port: Some(19051),
+    //        data_dir: String::from("/tmp/torlib2"),
+    //    }
+    //    .into();
+    //    assert_eq!(service.socks_port, 19051);
+    //    assert_eq!(service.control_port.contains("127.0.0.1:"),true);
+    //    assert_eq!(service._handle.is_some(), true);
+    //    let mut control_conn = service
+    //        .get_control_auth_conn(Some(|_: AsyncEvent<'static>| async move { Ok(()) }))
+    //        .await;
+    //    let _ = control_conn.wait_bootstrap_and_own(Some(true)).await;
+    //    control_conn.shutdown();
+    //    let _ = service._handle.unwrap().join();
+    //}
 
     #[tokio::test]
     #[serial]
     async fn should_get_onion_url() {
         let service: TorService = TorServiceParam {
             port: 8000,
-            socks_port: Some(19051),
-            data_dir: String::from("/tmp/torlib2"),
+            socks_port: Some(19054),
+            data_dir: String::from("/tmp/torlib3"),
         }
         .into();
         let mut control_conn = service
@@ -190,7 +173,7 @@ mod tests {
                 Ok(())
             }))
             .await;
-        let _ = control_conn.wait_bootstrap_and_own(Some(true)).await;
+        let _ = control_conn.wait_bootstrap_and_own(None).await;
 
         let client = service.get_client().unwrap();
         let resp = client

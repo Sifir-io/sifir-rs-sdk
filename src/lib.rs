@@ -4,6 +4,21 @@
 //// mod tor;
 mod tor2;
 use tor2::TorService;
+use serde::{Deserialize, Serialize};
+#[derive(Serialize, Deserialize, Debug)]
+pub enum TorRequestMethod {
+    Get,
+    Post,
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub struct TorRequest {
+    method: TorRequestMethod,
+    payload: String,
+    url: String,
+    signature_header: String,
+}
+
 //
 //// use std::ffi::{size_t};
 //// use std::os::raw::c_char;
