@@ -3,8 +3,8 @@
 //use std::panic::catch_unwind;
 //// mod tor;
 mod tor2;
-use tor2::TorService;
 use serde::{Deserialize, Serialize};
+use tor2::TorService;
 #[derive(Serialize, Deserialize, Debug)]
 pub enum TorRequestMethod {
     Get,

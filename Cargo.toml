@@ -16,8 +16,8 @@ serde = { version="1.0.117", features = ["derive"]}
 futures = { version = "0.3.8" }
 
 [dev-dependencies]
+serial_test = "*"
 lazy_static = "1.4.0"
-serial_test = "0.5.0"
 
 [lib]
 path= "src/lib.rs"
