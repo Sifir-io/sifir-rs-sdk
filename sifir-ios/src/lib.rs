@@ -2,31 +2,13 @@
 //extern crate lazy_static;
 //use std::panic::catch_unwind;
 //// mod tor;
-mod tor2;
-use serde::{Deserialize, Serialize};
-use tor2::TorService;
-#[derive(Serialize, Deserialize, Debug)]
-pub enum TorRequestMethod {
-    Get,
-    Post,
-}
-
-#[derive(Serialize, Deserialize, Debug)]
-pub struct TorRequest {
-    method: TorRequestMethod,
-    payload: String,
-    url: String,
-    signature_header: String,
-}
-
+use crate::tor::{TorService,TorServiceParam};
 //
 //// use std::ffi::{size_t};
 //// use std::os::raw::c_char;
 //// let rt = tokio::runtime::Builder::new();
 //use std::ffi::CString;
 //use std::os::raw::{c_char, c_void};
-//use super::native_model::{PeopleNative, PeopleNativeWrapper};
-//use swapi_core::swapi::{SwapiClient};
 //use std::ops::Deref;
 //use super::callback::{Callback};
 //

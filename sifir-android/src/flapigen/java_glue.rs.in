@@ -1,0 +1,32 @@
+use crate::tor::{TorService, TorServiceParam};
+use jni_sys::*;
+use tokio::macros::support::Future;
+use tokio::net::TcpStream;
+use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
+
+foreign_class!(class TorServiceParam {
+    self_type TorServiceParam;
+    private constructor = empty;
+    fn getDataDir(&self) -> &str {
+        &this.data_dir
+     }
+    fn getSockPort(&self) -> &str {
+        &this.socks_port
+    }
+    fn getPort(&self) -> &str {
+        &this.port
+    }
+});
+
+type F = Future<Output = Result<(), ConnError>>;
+type H = Fn(AsyncEvent<'static>) -> F;
+
+foreign_callback!(callback H {
+    self_type H;
+});
+
+foreign_class!(class TorService {
+    self_type TorService;
+    constructor Tor::new()->TorService;
+    fn TorService::get_control_auth_conn<T>(&self, handle: Option<H>) -> AuthenticatedConn<TcpStream, H>;  
+});
