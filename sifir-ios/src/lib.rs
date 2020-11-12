@@ -2,7 +2,7 @@
 //extern crate lazy_static;
 //use std::panic::catch_unwind;
 //// mod tor;
-use crate::tor::{TorService,TorServiceParam};
+use crate::tor::{TorService, TorServiceParam};
 //
 //// use std::ffi::{size_t};
 //// use std::os::raw::c_char;
