@@ -8,15 +8,13 @@ use serial_test::serial;
 use std::cell::RefCell;
 use std::fs;
 use std::pin::Pin;
-use std::sync::{Arc, Mutex};
+use std::sync::{ Mutex};
 use std::thread::JoinHandle;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 
-type G = AuthenticatedConn<
-    TcpStream,
-    Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>> + '_>>>,
->;
+type F =     Box<dyn Fn(AsyncEvent<'static>)  -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>>;
+type G = AuthenticatedConn< TcpStream, F >;
 lazy_static! {
      //runtime with threaded pool
      static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(tokio::runtime::Builder::new()
@@ -24,7 +22,6 @@ lazy_static! {
          .enable_all()
          .build()
          .unwrap());
-     // static ref CTL_CONN: Arc<Mutex<Option<G>>> = Arc::new(Mutex::new(None));
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -97,10 +94,10 @@ impl From<TorServiceParam> for TorService {
     }
 }
 
-fn handler(event: AsyncEvent<'static>) -> Pin<Box<dyn Future<Output=Result<(),ConnError>> + '_>> {
-    Box::pin(async move {
-        Ok(())
-    })
+fn handler(
+    event: AsyncEvent<'static>,
+) -> Pin<Box<dyn Future<Output = Result<(), ConnError>> + '_>> {
+    Box::pin(async move { Ok(()) })
 }
 impl TorService {
     pub fn new(param: TorServiceParam) -> Self {
@@ -114,23 +111,20 @@ impl TorService {
         .unwrap();
         reqwest::Client::builder().proxy(proxy).build()
     }
-    pub fn take_control(&self) {
+    // FIXME here accept callback trait for FFI
+    // add start/stop hidden service
+    pub fn bootstrap_and_own(&self) {
         (*RUNTIME).lock().unwrap().block_on(async {
-            let mut ac = self
-                .get_control_auth_conn(Some(Box::new(handler)))
-                .await;
+            let mut ac = self.get_control_auth_conn(Some(Box::new(handler) as F)).await;
             ac.wait_bootstrap().await.unwrap();
+            ac.take_ownership().await.unwrap();
             // let mut conn = (*CTL_CONN).lock().unwrap().unwrap();
             //  *conn = Some(ac);
             // STORE THIS!
-             *self._ctl.borrow_mut() = Some(ac);
+            *self._ctl.borrow_mut() = Some(ac);
         });
     }
-    async fn get_control_auth_conn<G>(
-        &self,
-        handle: Option<G>,
-    ) -> AuthenticatedConn<TcpStream, G>
-    {
+    async fn get_control_auth_conn<F>(&self, handle: Option<F>) -> AuthenticatedConn<TcpStream, F> {
         let s = TcpStream::connect(self.control_port.trim()).await.unwrap();
         let mut utc = UnauthenticatedConn::new(s);
         // returns node info + cookie location ?
@@ -173,6 +167,7 @@ mod tests {
     use super::*;
 
     #[tokio::test]
+    #[ignore]
     #[serial(tor)]
     async fn get_from_param_and_await_boostrap() {
         let service: TorService = TorServiceParam {
@@ -184,33 +179,38 @@ mod tests {
         assert_eq!(service.socks_port, 19051);
         assert_eq!(service.control_port.contains("127.0.0.1:"), true);
         assert_eq!(service._handle.is_some(), true);
-        let mut control_conn = service
-            .get_control_auth_conn(Some(handler))
-            .await;
+        let mut control_conn = service.get_control_auth_conn(Some(handler)).await;
         let _ = control_conn.wait_bootstrap().await;
         control_conn.take_ownership().await;
         control_conn.shutdown();
         let _ = service._handle.unwrap().join();
     }
 
-    //#[tokio::test]
-    //#[serial(tor)]
-    //async fn should_get_onion_url() {
-    //    let service: TorService = TorServiceParam {
-    //        port: 8000,
-    //        socks_port: Some(19054),
-    //        data_dir: String::from("/tmp/torlib3"),
-    //    }
-    //    .into();
-    //    let mut control_conn = service.take_control();
-    //    let client = service.get_client().unwrap();
-    //    let resp = client
-    //        .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
-    //        .send()
-    //        .await
-    //        .unwrap();
-    //    assert_eq!(resp.status(), 200);
-    //    control_conn.shutdown();
-    //    let _ = service._handle.unwrap().join();
-    //}
+    #[test]
+    #[serial(tor)]
+    fn use_run_time_and_embded_control() {
+        let service: TorService = TorServiceParam {
+            port: 8000,
+            socks_port: Some(19054),
+            data_dir: String::from("/tmp/torlib3"),
+        }
+        .into();
+        service.bootstrap_and_own();
+        let client = service.get_client().unwrap();
+        (*RUNTIME).lock().unwrap().block_on(async {
+            let resp = client.  
+            get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
+            .send()
+            .await
+            .unwrap();
+            assert_eq!(resp.status(), 200);
+        });
+        
+        // take ctl and drop it 
+        {
+            let mut ctl = service._ctl.into_inner();
+            let _ = ctl.take();
+        }
+        let _ = service._handle.unwrap().join();
+    }
 }
