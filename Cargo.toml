@@ -1,6 +1,7 @@
 [workspace]
 members =[
     "tor",
+    "utils",
     "sifir-android",
     "sifir-ios"
 ]

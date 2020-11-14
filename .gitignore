@@ -2,3 +2,4 @@
 .idea/*
 .swp
 *.swp
+**/**/.DS_Store

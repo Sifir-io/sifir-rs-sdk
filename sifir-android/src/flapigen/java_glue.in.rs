@@ -3,6 +3,21 @@ use jni_sys::*;
 use tokio::macros::support::Future;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
+use crate::utils::{CallBackResult,CallBack};
+
+pub enum CallBackResult {
+    Success(String),
+    Error(String),
+}
+pub trait CallBack {
+    fn on_state_changed(&self, result: CallBackResult);
+}
+
+foreign_callback!(callback CallBack {
+    self_type CallBack;
+    onStateUpdate = CallBack::on_state_changed(&self, item: CallBackResult);
+});
+
 
 foreign_class!(class TorServiceParam {
     self_type TorServiceParam;
@@ -18,15 +33,8 @@ foreign_class!(class TorServiceParam {
     }
 });
 
-type F = Future<Output = Result<(), ConnError>>;
-type H = Fn(AsyncEvent<'static>) -> F;
-
-foreign_callback!(callback H {
-    self_type H;
-});
-
 foreign_class!(class TorService {
     self_type TorService;
     constructor Tor::new()->TorService;
-    fn TorService::get_control_auth_conn<T>(&self, handle: Option<H>) -> AuthenticatedConn<TcpStream, H>;  
+    fn TorService::start_service<T>(&self, handle: Option<H>) -> AuthenticatedConn<TcpStream, H>;
 });
