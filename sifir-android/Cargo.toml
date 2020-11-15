@@ -9,9 +9,9 @@ edition = "2018"
 [dependencies]
 tor = { path = "../tor" }
 utils = { path="../utils" }
+jni = "0.18.0"
 
 [build-dependencies]
-jni = "0.18.0"
 flapigen = "0.6.0-pre7"
 
 [lib]

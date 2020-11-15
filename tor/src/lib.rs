@@ -59,6 +59,7 @@ trait TorControlApi {
     fn wait_bootstrap(&mut self) -> Pin<Box<dyn Future<Output = Result<bool, ()>> + '_>>;
     fn shutdown(self);
 }
+
 impl From<TorServiceParam> for TorService {
     fn from(param: TorServiceParam) -> Self {
         let mut service = Tor::new();
@@ -142,8 +143,9 @@ impl TorService {
         ac
     }
     // FIXME here accept callback trait for FFI
+    /// Probably should be renamed to to_owned_node()
     // add start/stop hidden service
-    pub fn getbootstraped_and_owned(self, callback: Option<Box<CallBack>>) -> OwnedTorService {
+    pub fn to_owned_node(self, callback: Option<Box<CallBack>>) -> OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut ac = self
                 .get_control_auth_conn(Some(Box::new(handler) as F))
@@ -162,8 +164,19 @@ impl TorService {
         })
     }
 }
+impl From<TorServiceParam> for OwnedTorService {
+    fn from(param:TorServiceParam)->Self{
+        let t:TorService = param.into();
+        t.to_owned_node(None)
+    }
+}
+
 /// Implemntation when TorService has AuthenticatedConnection established
+/// This is what the FFI interacts with
 impl OwnedTorService {
+    fn new(param:TorServiceParam)->Self{
+        param.into()
+    }
     // TODO check port is not already taken
     fn create_hidden_service(
         &mut self,
@@ -198,13 +211,12 @@ impl OwnedTorService {
         })
     }
 
+    /// take control conn and drop it.
+    /// Closing the owned connection and causes tor daemon to shutdown
     fn shutdown(self) {
-        // take control conn and drop it which will close connection and cause tor daemon to shutdown
         {
             let _ = self._ctl.into_inner();
-            println!("ssssss");
         }
-        println!("sss wiating");
         let _ = self._handle.unwrap().join();
     }
 }
@@ -261,25 +273,21 @@ mod tests {
     fn TorService_can_use_run_time_and_get_OwnedTorservice() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
-            data_dir: String::from("/tmp/torlib3"),
+            data_dir: String::from("/tmp/sifir_rs_sdk/tor"),
         }
         .into();
         let client = service.get_client().unwrap();
-        let mut owned_service = service.getbootstraped_and_owned(None);
-        println!("Got ow");
+        let mut owned_node = service.to_owned_node(None);
         (*RUNTIME).lock().unwrap().block_on(async {
-            println!("getting");
             let resp = client
                 .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
                 .send()
                 .await
                 .unwrap();
             assert_eq!(resp.status(), 200);
-            println!("got");
         });
         // take ctl and drop it
-        println!("shud");
-        owned_service.shutdown();
+        owned_node.shutdown();
     }
 
     //#[test]
