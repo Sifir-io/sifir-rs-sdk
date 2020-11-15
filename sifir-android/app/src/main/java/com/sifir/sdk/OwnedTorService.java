@@ -13,10 +13,10 @@ public final class OwnedTorService {
     }
     private static native long init(long param);
 
-    public final void shut_down() {
-        do_shut_down(mNativeObj);
+    public final void shutdown() {
+        do_shutdown(mNativeObj);
     }
-    private static native void do_shut_down(long self);
+    private static native void do_shutdown(long self);
 
     public synchronized void delete() {
         if (mNativeObj != 0) {

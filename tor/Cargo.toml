@@ -20,6 +20,6 @@ utils = { path = "../utils" }
 [dev-dependencies]
 serial_test = "*"
 
-[lib]
-crate-type = ["staticlib", "cdylib"]
+#[lib]
+#crate-type = ["staticlib", "cdylib"]
 #crate-type = ["lib", "cdylib"]

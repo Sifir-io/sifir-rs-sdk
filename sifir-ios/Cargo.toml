@@ -8,10 +8,10 @@ edition = "2018"
 
 [dependencies]
 tor = { path = "../tor" }
+cargo-lipo = "3.1.1"
 
 [build-dependencies]
 cbindgen = "0.15.0"
-cargo-lipo = "3.1.1"
 
 [lib]
 crate-type = ["staticlib", "cdylib"]

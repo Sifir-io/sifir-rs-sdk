@@ -6,9 +6,10 @@ use libtor::{HiddenServiceVersion, Tor, TorAddress, TorFlag};
 use serde::{Deserialize, Serialize};
 #[cfg(test)]
 use serial_test::serial;
+use std::borrow::BorrowMut;
 use std::cell::RefCell;
 use std::fs;
-use std::net::{IpAddr,Ipv4Addr, SocketAddr};
+use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::thread::JoinHandle;
@@ -31,27 +32,35 @@ lazy_static! {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TorServiceParam {
-    socks_port: Option<u16>,
-    data_dir: String,
+    pub socks_port: Option<u16>,
+    pub data_dir: String,
 }
+
 pub struct TorService {
     socks_port: u16,
     control_port: String,
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
 }
+
 pub struct OwnedTorService {
-    socks_port: u16,
-    control_port: String,
+    pub socks_port: u16,
+    pub control_port: String,
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
-    _ctl: RefCell<G>,
+    _ctl: RefCell<Option<G>>,
 }
+
 pub struct TorHiddenServiceParam {
     port: u16,
 }
+
 pub struct TorHiddenService {
     onion_url: TorAddress,
     secret_key: [u8; 64],
 }
+
+//trait TorSocksProxy {
+//    fn get_socks_port(&self) -> u16;
+//}
 
 trait TorControlApi {
     // async fns in traits are a shitshow
@@ -114,6 +123,7 @@ fn handler(
 ) -> Pin<Box<dyn Future<Output = Result<(), ConnError>> + '_>> {
     Box::pin(async move { Ok(()) })
 }
+
 impl TorService {
     pub fn new(param: TorServiceParam) -> Self {
         param.into()
@@ -143,7 +153,7 @@ impl TorService {
     }
     // FIXME here accept callback trait for FFI
     /// Probably should be renamed to to_owned_node()
-    // add start/stop hidden service
+    /// Converts TorService to OwnedTorService, consuming the TorService
     pub fn to_owned_node(self, callback: Option<Box<CallBack>>) -> OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut ac = self
@@ -151,21 +161,19 @@ impl TorService {
                 .await;
             ac.wait_bootstrap().await.unwrap();
             ac.take_ownership().await.unwrap();
-            // let mut conn = (*CTL_CONN).lock().unwrap().unwrap();
-            //  *conn = Some(ac);
-            // STORE THIS!
             OwnedTorService {
                 socks_port: self.socks_port,
                 control_port: self.control_port,
                 _handle: self._handle,
-                _ctl: RefCell::new(ac),
+                _ctl: RefCell::new(Some(ac)),
             }
         })
     }
 }
+
 impl From<TorServiceParam> for OwnedTorService {
-    fn from(param:TorServiceParam)->Self{
-        let t:TorService = param.into();
+    fn from(param: TorServiceParam) -> Self {
+        let t: TorService = param.into();
         t.to_owned_node(None)
     }
 }
@@ -173,16 +181,17 @@ impl From<TorServiceParam> for OwnedTorService {
 /// Implemntation when TorService has AuthenticatedConnection established
 /// This is what the FFI interacts with
 impl OwnedTorService {
-    fn new(param:TorServiceParam)->Self{
+    pub fn new(param: TorServiceParam) -> Self {
         param.into()
     }
     // TODO check port is not already taken
-    fn create_hidden_service(
+    pub fn create_hidden_service(
         &mut self,
         param: TorHiddenServiceParam,
     ) -> Result<TorHiddenService, ConnError> {
         (*RUNTIME).lock().unwrap().block_on(async {
-            let mut ctl = self._ctl.borrow_mut();
+            let mut _ctl = self._ctl.borrow_mut();
+            let ctl = _ctl.as_mut().unwrap();
             let service_key = TorSecretKeyV3::generate();
             ctl.add_onion_v3(
                 &service_key,
@@ -212,13 +221,19 @@ impl OwnedTorService {
 
     /// take control conn and drop it.
     /// Closing the owned connection and causes tor daemon to shutdown
-    fn shutdown(self) {
+    pub fn shutdown(&mut self) {
         {
-            let _ = self._ctl.into_inner();
+            let mut x = self._ctl.borrow_mut().take();
         }
-        let _ = self._handle.unwrap().join();
+        let _ = self._handle.take().unwrap().join();
     }
 }
+
+//impl TorSocksProxy for OwnedTorService {
+//    fn get_socks_port(&self) -> u16 {
+//        self.socks_port
+//    }
+//}
 
 /// High level API for Torut used internally by TorService to expose
 /// note control functions to FFI and user
@@ -242,7 +257,6 @@ where
     // to shutdown
     fn shutdown(self) {}
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -262,17 +276,17 @@ mod tests {
         let mut control_conn = service.get_control_auth_conn(Some(handler)).await;
         let bootsraped = control_conn.wait_bootstrap().await.unwrap();
         assert_eq!(bootsraped, true);
-        control_conn.take_ownership().await;
+        control_conn.take_ownership().await.unwrap();
         control_conn.shutdown();
         let _ = service._handle.unwrap().join();
     }
 
     #[test]
     #[serial(tor)]
-    fn TorService_can_use_run_time_and_get_OwnedTorservice() {
+    fn TorService_can_use_run_time_and_convert_to_OwnedTorservice() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
-            data_dir: String::from("/tmp/sifir_rs_sdk/tor"),
+            data_dir: String::from("/tmp/sifir_rs_sdk/"),
         }
         .into();
         let client = service.get_client().unwrap();

@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 tor = { path = "../tor" }
-utils = { path="../utils" }
+utils = { path = "../utils"}
 jni = "0.18.0"
 jni-sys = "0.3.0"
 log = "0.4.6"
