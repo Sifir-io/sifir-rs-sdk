@@ -1,5 +1,6 @@
 ## Copy built android $targets for a $libfile to an Android project located in $DIR
 
+# FIXME change this to input or env ? 
 DIR="/home/gus/Projects/sifir-io-public/rn-tor/android/src/main/java/com/reactnativerntor";
 targets=("i686-linux-android" "x86"  "armv7-linux-androideabi" "armeabi" "aarch64-linux-android" "arm64");
 libfile="libsifir_android.so";
