@@ -10,6 +10,11 @@ edition = "2018"
 tor = { path = "../tor" }
 utils = { path="../utils" }
 jni = "0.18.0"
+jni-sys = "0.3.0"
+log = "0.4.6"
+log-panics = "2.0"
+# TODO update 0.9 this if it doesn't nbreak anything
+android_logger = "0.8"
 
 [build-dependencies]
 flapigen = "0.6.0-pre7"

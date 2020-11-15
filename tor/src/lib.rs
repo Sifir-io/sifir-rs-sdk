@@ -34,7 +34,6 @@ pub struct TorServiceParam {
     socks_port: Option<u16>,
     data_dir: String,
 }
-
 pub struct TorService {
     socks_port: u16,
     control_port: String,

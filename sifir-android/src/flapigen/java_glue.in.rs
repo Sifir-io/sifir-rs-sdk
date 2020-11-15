@@ -1,9 +1,6 @@
 use tor::{OwnedTorService,TorService, TorServiceParam};
-use jni::*;
-use tokio::macros::support::Future;
-use tokio::net::TcpStream;
-use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
-use crate::utils::{CallBackResult,CallBack};
+use jni_sys::*;
+use utils::{CallBackResult,CallBack};
 
 //pub enum CallBackResult {
 //    Success(String),
