@@ -2,8 +2,12 @@
 
 # FIXME change this to input or env ? 
 DIR="/home/gus/Projects/sifir-io-public/rn-tor/android/src/main/java/com/reactnativerntor";
+
+# tuple (rust target,android target)
 targets=("i686-linux-android" "x86"  "armv7-linux-androideabi" "armeabi" "aarch64-linux-android" "arm64");
 libfile="libsifir_android.so";
+# FIXME link this with path in build.rs
+java_gen_path="../app/src/main/java/com/sifir/sdk"
 
 # Check and crate directories in Android project
 [ ! -d "$DIR" ] && echo "Directory $DIR doesnt' exists exiting!" && exit -1;
@@ -12,9 +16,14 @@ mkdir -p "$DIR/jniLibs";
 retVal=$?;
 [ $retVal -ne 0 ] && echo "[ERROR] Error creating $DIR/jniLibs bugging out ..." && exit -1;
 
+# Copy java files
+[ ! -d "$java_gen_path" ] && echo "[ERROR] Java genrated files not found in $java_gen_path, bugging out " && exit -1;
+mkdir -p "$DIR/sifir_sdk";
+retVal=$?;
+[ $retVal -ne 0 ] && echo "[ERROR] Error $DIR/sifir_sdk bugging out..." && exit -1;
+cp -r "$java_gen_path/" "$DIR/";
 
 # Copy lib targets to respevtive android project directories 
-# tuple (rust target,android target)
 for ((i=0; i<${#targets[@]}; i+=2)); do
     libpath="../../target/${targets[i]}/release/$libfile";
     if [ ! -f "$libpath" ]; then
