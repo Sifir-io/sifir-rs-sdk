@@ -221,9 +221,10 @@ impl OwnedTorService {
 
     /// take control conn and drop it.
     /// Closing the owned connection and causes tor daemon to shutdown
+    /// Then waits on the Tor daemon thread to exit
     pub fn shutdown(&mut self) {
         {
-            let mut x = self._ctl.borrow_mut().take();
+            let _ = self._ctl.borrow_mut().take();
         }
         let _ = self._handle.take().unwrap().join();
     }
