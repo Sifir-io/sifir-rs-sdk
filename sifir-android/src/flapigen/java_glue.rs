@@ -810,11 +810,10 @@ fn to_java_util_optional_int(env: *mut JNIEnv, x: Option<i32>) -> jobject {
     }
 }
 use jni_sys::*;
-use tor::{OwnedTorService, TorService, TorServiceParam};
-use utils::{CallBack, CallBackResult};
+use tor::{OwnedTorService, TorServiceParam};
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence1(
+pub extern "C" fn Java_com_sifir_tor_JNIReachabilityFence_reachabilityFence1(
     _env: *mut JNIEnv,
     _: jclass,
     _: jobject,
@@ -822,7 +821,7 @@ pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence1(
 }
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence2(
+pub extern "C" fn Java_com_sifir_tor_JNIReachabilityFence_reachabilityFence2(
     _env: *mut JNIEnv,
     _: jclass,
     _: jobject,
@@ -831,7 +830,7 @@ pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence2(
 }
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence3(
+pub extern "C" fn Java_com_sifir_tor_JNIReachabilityFence_reachabilityFence3(
     _env: *mut JNIEnv,
     _: jclass,
     _: jobject,
@@ -841,21 +840,9 @@ pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence3(
 }
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence4(
+pub extern "C" fn Java_com_sifir_tor_JNIReachabilityFence_reachabilityFence4(
     _env: *mut JNIEnv,
     _: jclass,
-    _: jobject,
-    _: jobject,
-    _: jobject,
-    _: jobject,
-) {
-}
-#[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
-#[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence5(
-    _env: *mut JNIEnv,
-    _: jclass,
-    _: jobject,
     _: jobject,
     _: jobject,
     _: jobject,
@@ -864,10 +851,9 @@ pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence5(
 }
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence6(
+pub extern "C" fn Java_com_sifir_tor_JNIReachabilityFence_reachabilityFence5(
     _env: *mut JNIEnv,
     _: jclass,
-    _: jobject,
     _: jobject,
     _: jobject,
     _: jobject,
@@ -877,10 +863,9 @@ pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence6(
 }
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence7(
+pub extern "C" fn Java_com_sifir_tor_JNIReachabilityFence_reachabilityFence6(
     _env: *mut JNIEnv,
     _: jclass,
-    _: jobject,
     _: jobject,
     _: jobject,
     _: jobject,
@@ -891,7 +876,21 @@ pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence7(
 }
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_JNIReachabilityFence_reachabilityFence8(
+pub extern "C" fn Java_com_sifir_tor_JNIReachabilityFence_reachabilityFence7(
+    _env: *mut JNIEnv,
+    _: jclass,
+    _: jobject,
+    _: jobject,
+    _: jobject,
+    _: jobject,
+    _: jobject,
+    _: jobject,
+    _: jobject,
+) {
+}
+#[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
+#[no_mangle]
+pub extern "C" fn Java_com_sifir_tor_JNIReachabilityFence_reachabilityFence8(
     _env: *mut JNIEnv,
     _: jclass,
     _: jobject,
@@ -909,7 +908,7 @@ impl SwigForeignClass for TorServiceParam {
     fn jni_class() -> jclass {
         swig_jni_find_class!(
             FOREIGN_CLASS_TORSERVICEPARAM,
-            "com/sifir/sdk/TorServiceParam"
+            "com/sifir/tor/TorServiceParam"
         )
     }
     fn jni_class_pointer_field() -> jfieldID {
@@ -940,7 +939,24 @@ impl SwigForeignClass for TorServiceParam {
 }
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_TorServiceParam_do_1delete(
+pub extern "C" fn Java_com_sifir_tor_TorServiceParam_init(
+    env: *mut JNIEnv,
+    _: jclass,
+    data_dir: jstring,
+    socks_port: jint,
+) -> jlong {
+    let mut data_dir: JavaString = JavaString::new(env, data_dir);
+    let mut data_dir: &str = data_dir.to_str();
+    let mut socks_port: u16 = <u16 as ::std::convert::TryFrom<jint>>::try_from(socks_port)
+        .expect("invalid jint, in jint => u16 conversation");
+    let this: TorServiceParam = TorServiceParam::new(data_dir, socks_port);
+    let this: Box<TorServiceParam> = Box::new(this);
+    let this: *mut TorServiceParam = Box::into_raw(this);
+    this as jlong
+}
+#[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
+#[no_mangle]
+pub extern "C" fn Java_com_sifir_tor_TorServiceParam_do_1delete(
     env: *mut JNIEnv,
     _: jclass,
     this: jlong,
@@ -955,7 +971,7 @@ impl SwigForeignClass for OwnedTorService {
     fn jni_class() -> jclass {
         swig_jni_find_class!(
             FOREIGN_CLASS_OWNEDTORSERVICE,
-            "com/sifir/sdk/OwnedTorService"
+            "com/sifir/tor/OwnedTorService"
         )
     }
     fn jni_class_pointer_field() -> jfieldID {
@@ -986,7 +1002,7 @@ impl SwigForeignClass for OwnedTorService {
 }
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_OwnedTorService_init(
+pub extern "C" fn Java_com_sifir_tor_OwnedTorService_init(
     env: *mut JNIEnv,
     _: jclass,
     param: jlong,
@@ -1002,7 +1018,20 @@ pub extern "C" fn Java_com_sifir_sdk_OwnedTorService_init(
 }
 #[allow(non_snake_case, unused_variables, unused_mut, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_OwnedTorService_do_1shutdown(
+pub extern "C" fn Java_com_sifir_tor_OwnedTorService_do_1getSocksPort(
+    env: *mut JNIEnv,
+    _: jclass,
+    this: jlong,
+) -> jint {
+    let this: &OwnedTorService =
+        unsafe { jlong_to_pointer::<OwnedTorService>(this).as_mut().unwrap() };
+    let mut ret: u16 = { this.socks_port };
+    let mut ret: jint = jint::from(ret);
+    ret
+}
+#[allow(non_snake_case, unused_variables, unused_mut, unused_unsafe)]
+#[no_mangle]
+pub extern "C" fn Java_com_sifir_tor_OwnedTorService_do_1shutdown(
     env: *mut JNIEnv,
     _: jclass,
     this: jlong,
@@ -1014,7 +1043,7 @@ pub extern "C" fn Java_com_sifir_sdk_OwnedTorService_do_1shutdown(
 }
 #[allow(unused_variables, unused_mut, non_snake_case, unused_unsafe)]
 #[no_mangle]
-pub extern "C" fn Java_com_sifir_sdk_OwnedTorService_do_1delete(
+pub extern "C" fn Java_com_sifir_tor_OwnedTorService_do_1delete(
     env: *mut JNIEnv,
     _: jclass,
     this: jlong,
@@ -1024,33 +1053,33 @@ pub extern "C" fn Java_com_sifir_sdk_OwnedTorService_do_1delete(
     let this: Box<OwnedTorService> = unsafe { Box::from_raw(this) };
     drop(this);
 }
-static mut JAVA_LANG_FLOAT: jclass = ::std::ptr::null_mut();
-static mut JAVA_LANG_FLOAT_FLOAT_VALUE: jmethodID = ::std::ptr::null_mut();
-static mut FOREIGN_CLASS_TORSERVICEPARAM: jclass = ::std::ptr::null_mut();
-static mut FOREIGN_CLASS_TORSERVICEPARAM_MNATIVEOBJ_FIELD: jfieldID = ::std::ptr::null_mut();
-static mut JAVA_UTIL_OPTIONAL_LONG: jclass = ::std::ptr::null_mut();
-static mut JAVA_UTIL_OPTIONAL_LONG_OF: jmethodID = ::std::ptr::null_mut();
-static mut JAVA_UTIL_OPTIONAL_LONG_EMPTY: jmethodID = ::std::ptr::null_mut();
 static mut JAVA_LANG_EXCEPTION: jclass = ::std::ptr::null_mut();
-static mut JAVA_LANG_DOUBLE: jclass = ::std::ptr::null_mut();
-static mut JAVA_LANG_DOUBLE_DOUBLE_VALUE_METHOD: jmethodID = ::std::ptr::null_mut();
-static mut JAVA_LANG_SHORT: jclass = ::std::ptr::null_mut();
-static mut JAVA_LANG_SHORT_SHORT_VALUE: jmethodID = ::std::ptr::null_mut();
-static mut JAVA_LANG_INTEGER: jclass = ::std::ptr::null_mut();
-static mut JAVA_LANG_INTEGER_INT_VALUE: jmethodID = ::std::ptr::null_mut();
 static mut JAVA_LANG_BYTE: jclass = ::std::ptr::null_mut();
 static mut JAVA_LANG_BYTE_BYTE_VALUE: jmethodID = ::std::ptr::null_mut();
+static mut JAVA_LANG_SHORT: jclass = ::std::ptr::null_mut();
+static mut JAVA_LANG_SHORT_SHORT_VALUE: jmethodID = ::std::ptr::null_mut();
+static mut JAVA_LANG_DOUBLE: jclass = ::std::ptr::null_mut();
+static mut JAVA_LANG_DOUBLE_DOUBLE_VALUE_METHOD: jmethodID = ::std::ptr::null_mut();
+static mut FOREIGN_CLASS_TORSERVICEPARAM: jclass = ::std::ptr::null_mut();
+static mut FOREIGN_CLASS_TORSERVICEPARAM_MNATIVEOBJ_FIELD: jfieldID = ::std::ptr::null_mut();
+static mut JAVA_LANG_LONG: jclass = ::std::ptr::null_mut();
+static mut JAVA_LANG_LONG_LONG_VALUE: jmethodID = ::std::ptr::null_mut();
+static mut FOREIGN_CLASS_OWNEDTORSERVICE: jclass = ::std::ptr::null_mut();
+static mut FOREIGN_CLASS_OWNEDTORSERVICE_MNATIVEOBJ_FIELD: jfieldID = ::std::ptr::null_mut();
 static mut JAVA_UTIL_OPTIONAL_INT: jclass = ::std::ptr::null_mut();
 static mut JAVA_UTIL_OPTIONAL_INT_OF: jmethodID = ::std::ptr::null_mut();
 static mut JAVA_UTIL_OPTIONAL_INT_EMPTY: jmethodID = ::std::ptr::null_mut();
-static mut JAVA_LANG_STRING: jclass = ::std::ptr::null_mut();
-static mut FOREIGN_CLASS_OWNEDTORSERVICE: jclass = ::std::ptr::null_mut();
-static mut FOREIGN_CLASS_OWNEDTORSERVICE_MNATIVEOBJ_FIELD: jfieldID = ::std::ptr::null_mut();
-static mut JAVA_LANG_LONG: jclass = ::std::ptr::null_mut();
-static mut JAVA_LANG_LONG_LONG_VALUE: jmethodID = ::std::ptr::null_mut();
+static mut JAVA_UTIL_OPTIONAL_LONG: jclass = ::std::ptr::null_mut();
+static mut JAVA_UTIL_OPTIONAL_LONG_OF: jmethodID = ::std::ptr::null_mut();
+static mut JAVA_UTIL_OPTIONAL_LONG_EMPTY: jmethodID = ::std::ptr::null_mut();
+static mut JAVA_LANG_FLOAT: jclass = ::std::ptr::null_mut();
+static mut JAVA_LANG_FLOAT_FLOAT_VALUE: jmethodID = ::std::ptr::null_mut();
 static mut JAVA_UTIL_OPTIONAL_DOUBLE: jclass = ::std::ptr::null_mut();
 static mut JAVA_UTIL_OPTIONAL_DOUBLE_OF: jmethodID = ::std::ptr::null_mut();
 static mut JAVA_UTIL_OPTIONAL_DOUBLE_EMPTY: jmethodID = ::std::ptr::null_mut();
+static mut JAVA_LANG_INTEGER: jclass = ::std::ptr::null_mut();
+static mut JAVA_LANG_INTEGER_INT_VALUE: jmethodID = ::std::ptr::null_mut();
+static mut JAVA_LANG_STRING: jclass = ::std::ptr::null_mut();
 #[no_mangle]
 pub extern "system" fn JNI_OnLoad(
     java_vm: *mut JavaVM,
@@ -1071,45 +1100,121 @@ pub extern "system" fn JNI_OnLoad(
     }
     assert!(!env.is_null());
     unsafe {
-        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Float"));
+        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Exception"));
         assert!(
             !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "java/lang/Float")
+            concat!("FindClass failed for ", "java/lang/Exception")
         );
         let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
         assert!(
             !class.is_null(),
-            concat!("FindClass failed for ", "java/lang/Float")
+            concat!("FindClass failed for ", "java/lang/Exception")
         );
         (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        JAVA_LANG_FLOAT = class;
+        JAVA_LANG_EXCEPTION = class;
+    }
+    unsafe {
+        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Byte"));
+        assert!(
+            !class_local_ref.is_null(),
+            concat!("FindClass failed for ", "java/lang/Byte")
+        );
+        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
+        assert!(
+            !class.is_null(),
+            concat!("FindClass failed for ", "java/lang/Byte")
+        );
+        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
+        JAVA_LANG_BYTE = class;
         let method_id: jmethodID =
-            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("floatValue"), swig_c_str!("()F"));
+            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("byteValue"), swig_c_str!("()B"));
         assert!(
             !method_id.is_null(),
             concat!(
                 "GetMethodID for class ",
-                "java/lang/Float",
+                "java/lang/Byte",
                 " method ",
-                "floatValue",
+                "byteValue",
                 " sig ",
-                "()F",
+                "()B",
                 " failed"
             )
         );
-        JAVA_LANG_FLOAT_FLOAT_VALUE = method_id;
+        JAVA_LANG_BYTE_BYTE_VALUE = method_id;
     }
     unsafe {
-        let class_local_ref =
-            (**env).FindClass.unwrap()(env, swig_c_str!("com/sifir/sdk/TorServiceParam"));
+        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Short"));
         assert!(
             !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "com/sifir/sdk/TorServiceParam")
+            concat!("FindClass failed for ", "java/lang/Short")
         );
         let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
         assert!(
             !class.is_null(),
-            concat!("FindClass failed for ", "com/sifir/sdk/TorServiceParam")
+            concat!("FindClass failed for ", "java/lang/Short")
+        );
+        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
+        JAVA_LANG_SHORT = class;
+        let method_id: jmethodID =
+            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("shortValue"), swig_c_str!("()S"));
+        assert!(
+            !method_id.is_null(),
+            concat!(
+                "GetMethodID for class ",
+                "java/lang/Short",
+                " method ",
+                "shortValue",
+                " sig ",
+                "()S",
+                " failed"
+            )
+        );
+        JAVA_LANG_SHORT_SHORT_VALUE = method_id;
+    }
+    unsafe {
+        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Double"));
+        assert!(
+            !class_local_ref.is_null(),
+            concat!("FindClass failed for ", "java/lang/Double")
+        );
+        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
+        assert!(
+            !class.is_null(),
+            concat!("FindClass failed for ", "java/lang/Double")
+        );
+        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
+        JAVA_LANG_DOUBLE = class;
+        let method_id: jmethodID = (**env).GetMethodID.unwrap()(
+            env,
+            class,
+            swig_c_str!("doubleValue"),
+            swig_c_str!("()D"),
+        );
+        assert!(
+            !method_id.is_null(),
+            concat!(
+                "GetMethodID for class ",
+                "java/lang/Double",
+                " method ",
+                "doubleValue",
+                " sig ",
+                "()D",
+                " failed"
+            )
+        );
+        JAVA_LANG_DOUBLE_DOUBLE_VALUE_METHOD = method_id;
+    }
+    unsafe {
+        let class_local_ref =
+            (**env).FindClass.unwrap()(env, swig_c_str!("com/sifir/tor/TorServiceParam"));
+        assert!(
+            !class_local_ref.is_null(),
+            concat!("FindClass failed for ", "com/sifir/tor/TorServiceParam")
+        );
+        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
+        assert!(
+            !class.is_null(),
+            concat!("FindClass failed for ", "com/sifir/tor/TorServiceParam")
         );
         (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
         FOREIGN_CLASS_TORSERVICEPARAM = class;
@@ -1119,7 +1224,7 @@ pub extern "system" fn JNI_OnLoad(
             !field_id.is_null(),
             concat!(
                 "GetStaticFieldID for class ",
-                "com/sifir/sdk/TorServiceParam",
+                "com/sifir/tor/TorServiceParam",
                 " method ",
                 "mNativeObj",
                 " sig ",
@@ -1128,6 +1233,117 @@ pub extern "system" fn JNI_OnLoad(
             )
         );
         FOREIGN_CLASS_TORSERVICEPARAM_MNATIVEOBJ_FIELD = field_id;
+    }
+    unsafe {
+        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Long"));
+        assert!(
+            !class_local_ref.is_null(),
+            concat!("FindClass failed for ", "java/lang/Long")
+        );
+        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
+        assert!(
+            !class.is_null(),
+            concat!("FindClass failed for ", "java/lang/Long")
+        );
+        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
+        JAVA_LANG_LONG = class;
+        let method_id: jmethodID =
+            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("longValue"), swig_c_str!("()J"));
+        assert!(
+            !method_id.is_null(),
+            concat!(
+                "GetMethodID for class ",
+                "java/lang/Long",
+                " method ",
+                "longValue",
+                " sig ",
+                "()J",
+                " failed"
+            )
+        );
+        JAVA_LANG_LONG_LONG_VALUE = method_id;
+    }
+    unsafe {
+        let class_local_ref =
+            (**env).FindClass.unwrap()(env, swig_c_str!("com/sifir/tor/OwnedTorService"));
+        assert!(
+            !class_local_ref.is_null(),
+            concat!("FindClass failed for ", "com/sifir/tor/OwnedTorService")
+        );
+        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
+        assert!(
+            !class.is_null(),
+            concat!("FindClass failed for ", "com/sifir/tor/OwnedTorService")
+        );
+        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
+        FOREIGN_CLASS_OWNEDTORSERVICE = class;
+        let field_id: jfieldID =
+            (**env).GetFieldID.unwrap()(env, class, swig_c_str!("mNativeObj"), swig_c_str!("J"));
+        assert!(
+            !field_id.is_null(),
+            concat!(
+                "GetStaticFieldID for class ",
+                "com/sifir/tor/OwnedTorService",
+                " method ",
+                "mNativeObj",
+                " sig ",
+                "J",
+                " failed"
+            )
+        );
+        FOREIGN_CLASS_OWNEDTORSERVICE_MNATIVEOBJ_FIELD = field_id;
+    }
+    unsafe {
+        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/util/OptionalInt"));
+        assert!(
+            !class_local_ref.is_null(),
+            concat!("FindClass failed for ", "java/util/OptionalInt")
+        );
+        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
+        assert!(
+            !class.is_null(),
+            concat!("FindClass failed for ", "java/util/OptionalInt")
+        );
+        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
+        JAVA_UTIL_OPTIONAL_INT = class;
+        let method_id: jmethodID = (**env).GetStaticMethodID.unwrap()(
+            env,
+            class,
+            swig_c_str!("of"),
+            swig_c_str!("(I)Ljava/util/OptionalInt;"),
+        );
+        assert!(
+            !method_id.is_null(),
+            concat!(
+                "GetStaticMethodID for class ",
+                "java/util/OptionalInt",
+                " method ",
+                "of",
+                " sig ",
+                "(I)Ljava/util/OptionalInt;",
+                " failed"
+            )
+        );
+        JAVA_UTIL_OPTIONAL_INT_OF = method_id;
+        let method_id: jmethodID = (**env).GetStaticMethodID.unwrap()(
+            env,
+            class,
+            swig_c_str!("empty"),
+            swig_c_str!("()Ljava/util/OptionalInt;"),
+        );
+        assert!(
+            !method_id.is_null(),
+            concat!(
+                "GetStaticMethodID for class ",
+                "java/util/OptionalInt",
+                " method ",
+                "empty",
+                " sig ",
+                "()Ljava/util/OptionalInt;",
+                " failed"
+            )
+        );
+        JAVA_UTIL_OPTIONAL_INT_EMPTY = method_id;
     }
     unsafe {
         let class_local_ref =
@@ -1183,263 +1399,33 @@ pub extern "system" fn JNI_OnLoad(
         JAVA_UTIL_OPTIONAL_LONG_EMPTY = method_id;
     }
     unsafe {
-        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Exception"));
+        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Float"));
         assert!(
             !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "java/lang/Exception")
+            concat!("FindClass failed for ", "java/lang/Float")
         );
         let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
         assert!(
             !class.is_null(),
-            concat!("FindClass failed for ", "java/lang/Exception")
+            concat!("FindClass failed for ", "java/lang/Float")
         );
         (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        JAVA_LANG_EXCEPTION = class;
-    }
-    unsafe {
-        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Double"));
-        assert!(
-            !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "java/lang/Double")
-        );
-        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
-        assert!(
-            !class.is_null(),
-            concat!("FindClass failed for ", "java/lang/Double")
-        );
-        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        JAVA_LANG_DOUBLE = class;
-        let method_id: jmethodID = (**env).GetMethodID.unwrap()(
-            env,
-            class,
-            swig_c_str!("doubleValue"),
-            swig_c_str!("()D"),
-        );
-        assert!(
-            !method_id.is_null(),
-            concat!(
-                "GetMethodID for class ",
-                "java/lang/Double",
-                " method ",
-                "doubleValue",
-                " sig ",
-                "()D",
-                " failed"
-            )
-        );
-        JAVA_LANG_DOUBLE_DOUBLE_VALUE_METHOD = method_id;
-    }
-    unsafe {
-        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Short"));
-        assert!(
-            !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "java/lang/Short")
-        );
-        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
-        assert!(
-            !class.is_null(),
-            concat!("FindClass failed for ", "java/lang/Short")
-        );
-        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        JAVA_LANG_SHORT = class;
+        JAVA_LANG_FLOAT = class;
         let method_id: jmethodID =
-            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("shortValue"), swig_c_str!("()S"));
+            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("floatValue"), swig_c_str!("()F"));
         assert!(
             !method_id.is_null(),
             concat!(
                 "GetMethodID for class ",
-                "java/lang/Short",
+                "java/lang/Float",
                 " method ",
-                "shortValue",
+                "floatValue",
                 " sig ",
-                "()S",
+                "()F",
                 " failed"
             )
         );
-        JAVA_LANG_SHORT_SHORT_VALUE = method_id;
-    }
-    unsafe {
-        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Integer"));
-        assert!(
-            !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "java/lang/Integer")
-        );
-        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
-        assert!(
-            !class.is_null(),
-            concat!("FindClass failed for ", "java/lang/Integer")
-        );
-        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        JAVA_LANG_INTEGER = class;
-        let method_id: jmethodID =
-            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("intValue"), swig_c_str!("()I"));
-        assert!(
-            !method_id.is_null(),
-            concat!(
-                "GetMethodID for class ",
-                "java/lang/Integer",
-                " method ",
-                "intValue",
-                " sig ",
-                "()I",
-                " failed"
-            )
-        );
-        JAVA_LANG_INTEGER_INT_VALUE = method_id;
-    }
-    unsafe {
-        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Byte"));
-        assert!(
-            !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "java/lang/Byte")
-        );
-        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
-        assert!(
-            !class.is_null(),
-            concat!("FindClass failed for ", "java/lang/Byte")
-        );
-        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        JAVA_LANG_BYTE = class;
-        let method_id: jmethodID =
-            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("byteValue"), swig_c_str!("()B"));
-        assert!(
-            !method_id.is_null(),
-            concat!(
-                "GetMethodID for class ",
-                "java/lang/Byte",
-                " method ",
-                "byteValue",
-                " sig ",
-                "()B",
-                " failed"
-            )
-        );
-        JAVA_LANG_BYTE_BYTE_VALUE = method_id;
-    }
-    unsafe {
-        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/util/OptionalInt"));
-        assert!(
-            !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "java/util/OptionalInt")
-        );
-        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
-        assert!(
-            !class.is_null(),
-            concat!("FindClass failed for ", "java/util/OptionalInt")
-        );
-        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        JAVA_UTIL_OPTIONAL_INT = class;
-        let method_id: jmethodID = (**env).GetStaticMethodID.unwrap()(
-            env,
-            class,
-            swig_c_str!("of"),
-            swig_c_str!("(I)Ljava/util/OptionalInt;"),
-        );
-        assert!(
-            !method_id.is_null(),
-            concat!(
-                "GetStaticMethodID for class ",
-                "java/util/OptionalInt",
-                " method ",
-                "of",
-                " sig ",
-                "(I)Ljava/util/OptionalInt;",
-                " failed"
-            )
-        );
-        JAVA_UTIL_OPTIONAL_INT_OF = method_id;
-        let method_id: jmethodID = (**env).GetStaticMethodID.unwrap()(
-            env,
-            class,
-            swig_c_str!("empty"),
-            swig_c_str!("()Ljava/util/OptionalInt;"),
-        );
-        assert!(
-            !method_id.is_null(),
-            concat!(
-                "GetStaticMethodID for class ",
-                "java/util/OptionalInt",
-                " method ",
-                "empty",
-                " sig ",
-                "()Ljava/util/OptionalInt;",
-                " failed"
-            )
-        );
-        JAVA_UTIL_OPTIONAL_INT_EMPTY = method_id;
-    }
-    unsafe {
-        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/String"));
-        assert!(
-            !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "java/lang/String")
-        );
-        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
-        assert!(
-            !class.is_null(),
-            concat!("FindClass failed for ", "java/lang/String")
-        );
-        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        JAVA_LANG_STRING = class;
-    }
-    unsafe {
-        let class_local_ref =
-            (**env).FindClass.unwrap()(env, swig_c_str!("com/sifir/sdk/OwnedTorService"));
-        assert!(
-            !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "com/sifir/sdk/OwnedTorService")
-        );
-        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
-        assert!(
-            !class.is_null(),
-            concat!("FindClass failed for ", "com/sifir/sdk/OwnedTorService")
-        );
-        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        FOREIGN_CLASS_OWNEDTORSERVICE = class;
-        let field_id: jfieldID =
-            (**env).GetFieldID.unwrap()(env, class, swig_c_str!("mNativeObj"), swig_c_str!("J"));
-        assert!(
-            !field_id.is_null(),
-            concat!(
-                "GetStaticFieldID for class ",
-                "com/sifir/sdk/OwnedTorService",
-                " method ",
-                "mNativeObj",
-                " sig ",
-                "J",
-                " failed"
-            )
-        );
-        FOREIGN_CLASS_OWNEDTORSERVICE_MNATIVEOBJ_FIELD = field_id;
-    }
-    unsafe {
-        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Long"));
-        assert!(
-            !class_local_ref.is_null(),
-            concat!("FindClass failed for ", "java/lang/Long")
-        );
-        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
-        assert!(
-            !class.is_null(),
-            concat!("FindClass failed for ", "java/lang/Long")
-        );
-        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
-        JAVA_LANG_LONG = class;
-        let method_id: jmethodID =
-            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("longValue"), swig_c_str!("()J"));
-        assert!(
-            !method_id.is_null(),
-            concat!(
-                "GetMethodID for class ",
-                "java/lang/Long",
-                " method ",
-                "longValue",
-                " sig ",
-                "()J",
-                " failed"
-            )
-        );
-        JAVA_LANG_LONG_LONG_VALUE = method_id;
+        JAVA_LANG_FLOAT_FLOAT_VALUE = method_id;
     }
     unsafe {
         let class_local_ref =
@@ -1494,6 +1480,49 @@ pub extern "system" fn JNI_OnLoad(
         );
         JAVA_UTIL_OPTIONAL_DOUBLE_EMPTY = method_id;
     }
+    unsafe {
+        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/Integer"));
+        assert!(
+            !class_local_ref.is_null(),
+            concat!("FindClass failed for ", "java/lang/Integer")
+        );
+        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
+        assert!(
+            !class.is_null(),
+            concat!("FindClass failed for ", "java/lang/Integer")
+        );
+        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
+        JAVA_LANG_INTEGER = class;
+        let method_id: jmethodID =
+            (**env).GetMethodID.unwrap()(env, class, swig_c_str!("intValue"), swig_c_str!("()I"));
+        assert!(
+            !method_id.is_null(),
+            concat!(
+                "GetMethodID for class ",
+                "java/lang/Integer",
+                " method ",
+                "intValue",
+                " sig ",
+                "()I",
+                " failed"
+            )
+        );
+        JAVA_LANG_INTEGER_INT_VALUE = method_id;
+    }
+    unsafe {
+        let class_local_ref = (**env).FindClass.unwrap()(env, swig_c_str!("java/lang/String"));
+        assert!(
+            !class_local_ref.is_null(),
+            concat!("FindClass failed for ", "java/lang/String")
+        );
+        let class = (**env).NewGlobalRef.unwrap()(env, class_local_ref);
+        assert!(
+            !class.is_null(),
+            concat!("FindClass failed for ", "java/lang/String")
+        );
+        (**env).DeleteLocalRef.unwrap()(env, class_local_ref);
+        JAVA_LANG_STRING = class;
+    }
     SWIG_JNI_VERSION
 }
 #[no_mangle]
@@ -1513,55 +1542,55 @@ pub extern "system" fn JNI_OnUnload(java_vm: *mut JavaVM, _reserved: *mut ::std:
     }
     assert!(!env.is_null());
     unsafe {
-        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_FLOAT);
-        JAVA_LANG_FLOAT = ::std::ptr::null_mut()
-    }
-    unsafe {
-        (**env).DeleteGlobalRef.unwrap()(env, FOREIGN_CLASS_TORSERVICEPARAM);
-        FOREIGN_CLASS_TORSERVICEPARAM = ::std::ptr::null_mut()
-    }
-    unsafe {
-        (**env).DeleteGlobalRef.unwrap()(env, JAVA_UTIL_OPTIONAL_LONG);
-        JAVA_UTIL_OPTIONAL_LONG = ::std::ptr::null_mut()
-    }
-    unsafe {
         (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_EXCEPTION);
         JAVA_LANG_EXCEPTION = ::std::ptr::null_mut()
-    }
-    unsafe {
-        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_DOUBLE);
-        JAVA_LANG_DOUBLE = ::std::ptr::null_mut()
-    }
-    unsafe {
-        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_SHORT);
-        JAVA_LANG_SHORT = ::std::ptr::null_mut()
-    }
-    unsafe {
-        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_INTEGER);
-        JAVA_LANG_INTEGER = ::std::ptr::null_mut()
     }
     unsafe {
         (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_BYTE);
         JAVA_LANG_BYTE = ::std::ptr::null_mut()
     }
     unsafe {
-        (**env).DeleteGlobalRef.unwrap()(env, JAVA_UTIL_OPTIONAL_INT);
-        JAVA_UTIL_OPTIONAL_INT = ::std::ptr::null_mut()
+        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_SHORT);
+        JAVA_LANG_SHORT = ::std::ptr::null_mut()
     }
     unsafe {
-        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_STRING);
-        JAVA_LANG_STRING = ::std::ptr::null_mut()
+        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_DOUBLE);
+        JAVA_LANG_DOUBLE = ::std::ptr::null_mut()
     }
     unsafe {
-        (**env).DeleteGlobalRef.unwrap()(env, FOREIGN_CLASS_OWNEDTORSERVICE);
-        FOREIGN_CLASS_OWNEDTORSERVICE = ::std::ptr::null_mut()
+        (**env).DeleteGlobalRef.unwrap()(env, FOREIGN_CLASS_TORSERVICEPARAM);
+        FOREIGN_CLASS_TORSERVICEPARAM = ::std::ptr::null_mut()
     }
     unsafe {
         (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_LONG);
         JAVA_LANG_LONG = ::std::ptr::null_mut()
     }
     unsafe {
+        (**env).DeleteGlobalRef.unwrap()(env, FOREIGN_CLASS_OWNEDTORSERVICE);
+        FOREIGN_CLASS_OWNEDTORSERVICE = ::std::ptr::null_mut()
+    }
+    unsafe {
+        (**env).DeleteGlobalRef.unwrap()(env, JAVA_UTIL_OPTIONAL_INT);
+        JAVA_UTIL_OPTIONAL_INT = ::std::ptr::null_mut()
+    }
+    unsafe {
+        (**env).DeleteGlobalRef.unwrap()(env, JAVA_UTIL_OPTIONAL_LONG);
+        JAVA_UTIL_OPTIONAL_LONG = ::std::ptr::null_mut()
+    }
+    unsafe {
+        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_FLOAT);
+        JAVA_LANG_FLOAT = ::std::ptr::null_mut()
+    }
+    unsafe {
         (**env).DeleteGlobalRef.unwrap()(env, JAVA_UTIL_OPTIONAL_DOUBLE);
         JAVA_UTIL_OPTIONAL_DOUBLE = ::std::ptr::null_mut()
+    }
+    unsafe {
+        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_INTEGER);
+        JAVA_LANG_INTEGER = ::std::ptr::null_mut()
+    }
+    unsafe {
+        (**env).DeleteGlobalRef.unwrap()(env, JAVA_LANG_STRING);
+        JAVA_LANG_STRING = ::std::ptr::null_mut()
     }
 }

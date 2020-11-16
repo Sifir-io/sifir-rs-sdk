@@ -35,6 +35,16 @@ pub struct TorServiceParam {
     pub socks_port: Option<u16>,
     pub data_dir: String,
 }
+impl TorServiceParam {
+    /// A constructor for TorServiceParam to make it easier to be called from 
+    /// an FFI 
+    pub fn new(data_dir:&str,socks_port:u16)->TorServiceParam{
+        TorServiceParam{
+            data_dir: String::from(data_dir),
+            socks_port: Some(socks_port)
+        }
+    }
+}
 
 pub struct TorService {
     socks_port: u16,
