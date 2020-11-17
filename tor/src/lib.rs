@@ -30,18 +30,20 @@ lazy_static! {
     );
 }
 
+#[repr(C)]
 #[derive(Serialize, Deserialize, Debug)]
 pub struct TorServiceParam {
     pub socks_port: Option<u16>,
     pub data_dir: String,
 }
+
 impl TorServiceParam {
-    /// A constructor for TorServiceParam to make it easier to be called from 
-    /// an FFI 
-    pub fn new(data_dir:&str,socks_port:u16)->TorServiceParam{
-        TorServiceParam{
+    /// A constructor for TorServiceParam to make it easier to be called from
+    /// an FFI
+    pub fn new(data_dir: &str, socks_port: u16) -> TorServiceParam {
+        TorServiceParam {
             data_dir: String::from(data_dir),
-            socks_port: Some(socks_port)
+            socks_port: Some(socks_port),
         }
     }
 }
@@ -52,6 +54,7 @@ pub struct TorService {
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
 }
 
+#[repr(C)]
 pub struct OwnedTorService {
     pub socks_port: u16,
     pub control_port: String,
@@ -59,6 +62,7 @@ pub struct OwnedTorService {
     _ctl: RefCell<Option<G>>,
 }
 
+#[repr(C)]
 pub struct TorHiddenServiceParam {
     port: u16,
 }

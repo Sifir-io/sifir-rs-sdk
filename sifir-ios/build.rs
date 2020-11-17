@@ -1,22 +1,11 @@
-use std::env;
-extern crate cbindgen;
-extern crate lipo;
-
 use cbindgen::Language::C;
-
+use std::env;
 fn main() {
-    print_target_os();
-}
-
-fn print_target_os() {
-    let target_os = env::var("CARGO_CFG_TARGET_OS");
-    match target_os.as_ref().map(|x| &**x) {
-        Ok(tos) => println!("cargo:warning=target os {:?}", tos),
-        Err(err) => println!("cargo:warning=os not defined {:?}!", err),
-    }
-    let target_os = env::var("CARGO_CFG_TARGET_ARCH");
-    match target_os.as_ref().map(|x| &**x) {
-        Ok(tos) => println!("cargo:warning=target arch {:?}", tos),
-        Err(err) => println!("cargo:warning=arch not defined {:?}!", err),
-    }
+    let crate_dir = env::var("CARGO_MANIFEST_DIR").unwrap();
+    cbindgen::Builder::new()
+        .with_crate(crate_dir)
+        .with_language(C)
+        .generate()
+        .expect("Unable to generate bindings!!")
+        .write_to_file("./output/sifir-tor.h");
 }

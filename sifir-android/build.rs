@@ -20,8 +20,7 @@ fn setup_java() {
                 .join("sifir")
                 .join("tor"),
             "com.sifir.tor".into(),
-        )
-        // .use_null_annotation_from_package("android.support.annotation".into()),
+        ), // .use_null_annotation_from_package("android.support.annotation".into()),
     ))
     .rustfmt_bindings(true);
     //ANCHOR_END: config

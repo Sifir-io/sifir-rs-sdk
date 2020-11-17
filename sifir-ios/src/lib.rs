@@ -1,61 +1,36 @@
-//#[macro_use]
-//extern crate lazy_static;
-//use std::panic::catch_unwind;
-//// mod tor;
-use crate::tor::{TorService, TorServiceParam};
+use libc::{strlen,c_char};
+use std::ffi::CStr;
+use tor::{OwnedTorService, TorServiceParam};
+use std::{slice, str};
+
+#[repr(C)]
+/// Since the FFI simply starts and shutdowns the daemon we use an
+/// Opaque pointer here to pass across the FFI
+pub struct OwnedTorBoxed {
+    service: Option<Box<OwnedTorService>>,
+}
+#[no_mangle]
+pub extern "C" fn get_owned_TorService(
+    data_dir: *const c_char,
+    socks_port: u16,
+) -> *mut OwnedTorBoxed {
+    let dir_str = unsafe {
+        str::from_utf8_unchecked(slice::from_raw_parts(data_dir as *const u8, strlen(data_dir)+1))
+    };
+    let param = TorServiceParam {
+        socks_port: Some(socks_port),
+        data_dir: dir_str.into()
+    };
+    Box::into_raw(Box::new(OwnedTorBoxed {
+        service: Some(Box::new(OwnedTorService::new(param))),
+    }))
+}
 //
-//// use std::ffi::{size_t};
-//// use std::os::raw::c_char;
-//// let rt = tokio::runtime::Builder::new();
-//use std::ffi::CString;
-//use std::os::raw::{c_char, c_void};
-//use std::ops::Deref;
-//use super::callback::{Callback};
-//
-//
-///// METHOD 1
-///// Using Pointers to send the actual client back to Swift
-///// and have it do whatever it need to do there, we just destory etc.
-//
-////Create client
-//#[no_mangle]
-//pub extern "C" fn create_tor_client() -> *mut TorService{
-//    Box::into_raw(Box::new(TorService::new()))
-//}
-//
-////Release memory
-//#[no_mangle]
-//pub unsafe extern "C" fn destory_tor_client(client: *mut TorService) {
-//    assert!(!client.is_null());
-//    Box::from_raw(client);
-//}
-//
-//
-///// --- METHOD 2
-///// Using a byteSlice to retun values
-///// FIXME How do we keep the Service on ?
-//#[repr(C)]
-//pub struct RustByteSlice {
-//    pub bytes: *const u8,
-//    pub len: usize,
-//}
-//#[no_mangle]
-//pub extern "C" fn start_service() -> RustByteSlice {
-//    match catch_unwind(|| {
-//        let s = "I am from RUST!";
-//        s
-//    }) {
-//        Ok(s) => RustByteSlice {
-//            bytes: s.as_ptr(),
-//            len: s.len() as usize,
-//        },
-//        Err(_) => {
-//            let err = "%%ERRROR%%";
-//            RustByteSlice {
-//                bytes: err.as_ptr(),
-//                len: err.len() as usize,
-//            }
-//        }
-//    }
-//}
-//
+#[no_mangle]
+///# Safety
+/// Destroy and release ownedTorBox which will shut down owned connection and shutdown daemon
+pub unsafe extern "C" fn shutdown_owned_TorService(owned_client: *mut OwnedTorBoxed) {
+    assert!(!owned_client.is_null());
+    let mut owned: Box<OwnedTorBoxed> = Box::from_raw(owned_client);
+    owned.service.unwrap().shutdown();
+}
