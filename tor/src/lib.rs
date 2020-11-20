@@ -16,7 +16,15 @@ use std::thread::JoinHandle;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
-use utils::CallBack;
+
+/// TODO implement this for hidden service
+pub enum CallBackResult {
+    Success(String),
+    Error(String),
+}
+pub trait CallBack {
+    fn on_state_changed(&self, result: CallBackResult);
+}
 
 type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>>;
 type G = AuthenticatedConn<TcpStream, F>;
@@ -116,12 +124,12 @@ impl From<TorServiceParam> for TorService {
                 }
                 Err(e) => {
                     try_times += 1;
-                    if try_times > 7 {
+                    if try_times > 10 {
                         panic!("Could load Tor control config file");
                     }
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(300));
+            std::thread::sleep(std::time::Duration::from_millis(700));
         }
 
         TorService {
@@ -142,14 +150,6 @@ impl TorService {
     pub fn new(param: TorServiceParam) -> Self {
         param.into()
     }
-    pub fn get_client(&self) -> Result<reqwest::Client, reqwest::Error> {
-        let proxy = reqwest::Proxy::all(
-            reqwest::Url::parse(format!("socks5h://127.0.0.1:{}", self.socks_port).as_str())
-                .unwrap(),
-        )
-        .unwrap();
-        reqwest::Client::builder().proxy(proxy).build()
-    }
     async fn get_control_auth_conn<F>(&self, handle: Option<F>) -> AuthenticatedConn<TcpStream, F> {
         let s = TcpStream::connect(self.control_port.trim()).await.unwrap();
         let mut utc = UnauthenticatedConn::new(s);
@@ -168,7 +168,7 @@ impl TorService {
     // FIXME here accept callback trait for FFI
     /// Probably should be renamed to to_owned_node()
     /// Converts TorService to OwnedTorService, consuming the TorService
-    pub fn to_owned_node(self, callback: Option<Box<CallBack>>) -> OwnedTorService {
+    pub fn to_owned_node(self, callback: Option<Box<dyn CallBack>>) -> OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut ac = self
                 .get_control_auth_conn(Some(Box::new(handler) as F))
@@ -304,7 +304,7 @@ mod tests {
             data_dir: String::from("/tmp/sifir_rs_sdk/"),
         }
         .into();
-        let client = service.get_client().unwrap();
+        let client = utils::get_proxied_client(service.socks_port).unwrap();
         let mut owned_node = service.to_owned_node(None);
         (*RUNTIME).lock().unwrap().block_on(async {
             let resp = client

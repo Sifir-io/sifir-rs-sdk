@@ -5,3 +5,11 @@ members =[
     "sifir-android",
     "sifir-ios"
 ]
+
+[profile.dev]
+opt-level = "s"
+
+[profile.release]
+opt-level="s"
+#opt-level=3
+

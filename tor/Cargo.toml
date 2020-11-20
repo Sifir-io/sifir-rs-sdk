@@ -7,18 +7,19 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-reqwest = { version="0.10.8", features = ["socks", "json"] }
-tokio = { version= "0.2", features = ["full"] }
+tokio = { version= "0.2", features = ["net","rt-threaded"] }
 libtor = {version= "44.5.2+0.4.4.5", features=["vendored-openssl"]}
-torut = { version = "0.1.6" , features=["vendored_openssl"] }
+torut = { version = "0.1.6" }
+#torut = { version = "0.1.6" , features=["vendored_openssl"] }
 anyhow = "1.0.33"
 serde = { version="1.0.117", features = ["derive"]}
 lazy_static = "1.4.0"
-futures = "0.3.8"
-utils = { path = "../utils" }
+futures = { version="0.3.8", default-features = false}
 
 [dev-dependencies]
 serial_test = "*"
+utils = { path = "../utils" }
+tokio = { version= "0.2", features = ["net","rt-threaded","macros"] }
 
 #[lib]
 #crate-type = ["staticlib", "cdylib"]

@@ -15,4 +15,4 @@ cbindgen = "0.15.0"
 cargo-lipo = "3.1.1"
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["staticlib","cdylib"]
