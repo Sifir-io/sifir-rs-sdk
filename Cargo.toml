@@ -1,4 +1,7 @@
+#cargo-features = ["strip"]
+
 [workspace]
+
 members =[
     "tor",
     "utils",
@@ -10,6 +13,8 @@ members =[
 opt-level = "s"
 
 [profile.release]
-opt-level="s"
-#opt-level=3
+opt-level="z"
+lto = true
+codegen-units = 1 
+#strip = "symbols"
 
