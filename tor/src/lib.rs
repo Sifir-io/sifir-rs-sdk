@@ -279,7 +279,7 @@ mod tests {
     #[tokio::test]
     #[ignore]
     #[serial(tor)]
-    async fn get_from_param_and_await_boostrap_using_api() {
+    async fn get_from_param_and_await_boostrap_using_TorControlApi() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19051),
             data_dir: String::from("/tmp/torlib2"),
@@ -305,6 +305,7 @@ mod tests {
         }
         .into();
         let client = utils::get_proxied_client(service.socks_port).unwrap();
+
         let mut owned_node = service.to_owned_node(None);
         (*RUNTIME).lock().unwrap().block_on(async {
             let resp = client

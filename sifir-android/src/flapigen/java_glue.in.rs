@@ -1,5 +1,4 @@
 use jni_sys::*;
-// use utils::{CallBackResult,CallBack};
 use tor::{OwnedTorService, TorServiceParam};
 
 foreign_class!(class TorServiceParam {

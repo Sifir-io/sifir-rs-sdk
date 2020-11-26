@@ -9,7 +9,8 @@ import org.junit.Test;
 public class ExampleUnitTest {
     static {
         try {
-            System.load("/home/gus/Projects/sifir-io-public/sifir-rs-sdk/sifir-android/app/tor/src/test/jniLibs/x86_64/libsifir_android.so");
+             System.load("/home/gus/Projects/sifir-io-public/sifir-rs-sdk/sifir-android/app/tor/src/test/jniLibs/x86_64/libsifir_android.so");
+//        	System.loadLibrary("libsifir_android.so");
         } catch (UnsatisfiedLinkError e) {
             System.err.println("Native code library failed to load.\n" + e);
             System.exit(1);
