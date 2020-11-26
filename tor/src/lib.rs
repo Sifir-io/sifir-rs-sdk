@@ -398,14 +398,11 @@ mod tests {
             .unwrap();
         assert!(service_key.onion_url.to_string().contains(".onion"));
 
-        // Spawn a lsner to our request
+        // Spawn a lsner to our request and respond with 200
         let handle = (*RUNTIME).lock().unwrap().spawn(async {
             let listener = TcpListener::bind("127.0.0.1:20000").unwrap();
-            // accept connections and process them serially
             for stream in listener.incoming() {
                 let mut stream = stream.unwrap();
-                let mut buffer = [0; 1024];
-                stream.read(&mut buffer).unwrap();
                 let response = "HTTP/1.1 200 OK\r\n\r\n";
                 stream.write_all(response.as_bytes()).unwrap();
                 stream.flush().unwrap();

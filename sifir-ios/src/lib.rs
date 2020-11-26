@@ -85,10 +85,14 @@ pub unsafe extern "C" fn get_status_of_owned_TorService(
     let node_status = owned.get_status();
     Box::leak(owned);
     match node_status {
-        Ok(status) => Box::into_raw(Box::new(BoxedResult {
-            result: Some(Box::new(serde_json::to_string(&status).unwrap().into())),
-            message: ResultMessage::Success,
-        })),
+        Ok(status) => {
+            let status_string = serde_json::to_string(&status).unwrap();
+            println!("status is {}", status_string);
+            Box::into_raw(Box::new(BoxedResult {
+                result: Some(Box::new(status_string.into())),
+                message: ResultMessage::Success,
+            }))
+        }
         Err(e) => {
             let message: RustByteSlice = match e.downcast::<String>() {
                 Ok(msg) => msg,
@@ -101,6 +105,14 @@ pub unsafe extern "C" fn get_status_of_owned_TorService(
             }))
         }
     }
+}
+// FIXME this we need to consume and desctory our callbacks
+// ALSO parsing rustByteslice is messed up check exmaple from start
+// https://www.bignerdranch.com/blog/building-an-ios-app-in-rust-part-3-passing-owned-objects-between-rust-and-ios/
+pub unsafe extern "C" fn destroy_BoxedResult(rust_slice: *mut BoxedResult<T>) {
+    assert!(!owned_client.is_null());
+    let mut owned: Box<OwnedTorService> = Box::from_raw(owned_client);
+    owned.shutdown();
 }
 //
 #[no_mangle]
