@@ -21,6 +21,10 @@ serial_test = "*"
 utils = { path = "../utils" }
 tokio = { version= "0.2", features = ["net","rt-threaded","macros"] }
 
+
+[[example]]
+name = "hs_bind"
+#required-features = ["cli-utils", "esplora"]
 #[lib]
 #crate-type = ["staticlib", "cdylib"]
 #crate-type = ["lib", "cdylib"]

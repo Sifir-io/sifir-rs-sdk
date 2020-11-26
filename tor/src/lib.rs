@@ -72,13 +72,13 @@ pub struct OwnedTorService {
 
 #[repr(C)]
 pub struct TorHiddenServiceParam {
-    to_port: u16,
-    hs_port: u16,
+    pub to_port: u16,
+    pub hs_port: u16,
 }
 
 pub struct TorHiddenService {
-    onion_url: TorAddress,
-    secret_key: [u8; 64],
+    pub onion_url: TorAddress,
+    pub secret_key: [u8; 64],
 }
 
 //trait TorSocksProxy {
@@ -244,7 +244,6 @@ impl OwnedTorService {
                 &mut [(
                     param.hs_port,
                     SocketAddr::new(IpAddr::from(Ipv4Addr::new(127, 0, 0, 1)), param.to_port),
-
                 )]
                 .iter(),
             )
