@@ -294,7 +294,7 @@ where
             let mut input = String::new();
             while !input.trim().contains("PROGRESS=100 TAG=done") {
                 input = self.get_info("status/bootstrap-phase").await.unwrap();
-                std::thread::sleep(std::time::Duration::from_millis(700));
+                std::thread::sleep(std::time::Duration::from_millis(300));
             }
             Ok(true)
         })
