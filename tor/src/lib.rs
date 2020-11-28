@@ -72,24 +72,49 @@ pub struct OwnedTorService {
 
 #[repr(C)]
 pub struct TorHiddenServiceParam {
-    port: u16,
+    pub to_port: u16,
+    pub hs_port: u16,
 }
 
 pub struct TorHiddenService {
-    onion_url: TorAddress,
-    secret_key: [u8; 64],
+    pub onion_url: TorAddress,
+    pub secret_key: [u8; 64],
 }
 
 //trait TorSocksProxy {
 //    fn get_socks_port(&self) -> u16;
 //}
 
+/// The Phases of a Boostraping node
+/// From https://github.com/torproject/torspec/blob/master/proposals/137-bootstrap-phases.txt
+#[repr(C)]
+#[derive(Serialize, Deserialize, Debug)]
+/// String describing the current bootstarp phase of the node
+pub struct BootstrapPhase(String);
+
+#[repr(C)]
+#[derive(Serialize, Deserialize, Debug)]
+/// Describes the BootstrapPhase the Tor daemon is in.
+pub enum OwnedTorServiceBootstrapPhase {
+    // Daemon is done Boostraping and is ready to use
+    Done,
+    // Still bootstraping or error
+    Other(BootstrapPhase),
+}
+/// High level API for Torut used internally by TorService to expose
+/// note control functions to FFI and user
 trait TorControlApi {
     // async fns in traits are a shitshow
     fn wait_bootstrap(&mut self) -> Pin<Box<dyn Future<Output = Result<bool, ()>> + '_>>;
     fn shutdown(self);
+    fn get_status(
+        &mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<OwnedTorServiceBootstrapPhase, ()>> + '_>>;
 }
 
+/// Convert Torservice Param into an Unauthentication TorService:
+/// Instantiates the Tor service on a seperate thread, however does not take ownership
+/// nor await it's completion of the BootstrapPhase
 impl From<TorServiceParam> for TorService {
     fn from(param: TorServiceParam) -> Self {
         let mut service = Tor::new();
@@ -111,6 +136,7 @@ impl From<TorServiceParam> for TorService {
         let mut control_port = String::new();
         let mut try_times = 0;
         // TODO We wait for Tor to write the new config file otherwise we risk reading the old config and port.
+        // Anything less than a second and iOS errors out
         // Anyway to *know* when the new config has been written besides checking config file modifed after starting process?
         std::thread::sleep(std::time::Duration::from_millis(1000));
         while !is_ready {
@@ -140,6 +166,7 @@ impl From<TorServiceParam> for TorService {
     }
 }
 
+/// Needed by Torut
 fn handler(
     event: AsyncEvent<'static>,
 ) -> Pin<Box<dyn Future<Output = Result<(), ConnError>> + '_>> {
@@ -165,9 +192,10 @@ impl TorService {
         }
         ac
     }
-    // FIXME here accept callback trait for FFI
-    /// Probably should be renamed to to_owned_node()
+
     /// Converts TorService to OwnedTorService, consuming the TorService
+    /// and returning an OwnedTorService which is fully bootstrapped and under our control
+    /// (If we drop this object the Tor daemon will shut down)
     pub fn to_owned_node(self, callback: Option<Box<dyn CallBack>>) -> OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut ac = self
@@ -193,7 +221,7 @@ impl From<TorServiceParam> for OwnedTorService {
 }
 
 /// Implemntation when TorService has AuthenticatedConnection established
-/// This is what the FFI interacts with
+/// This is what the FFI and most external libs should be interacting with
 impl OwnedTorService {
     pub fn new(param: TorServiceParam) -> Self {
         param.into()
@@ -214,8 +242,8 @@ impl OwnedTorService {
                 false,
                 None,
                 &mut [(
-                    param.port,
-                    SocketAddr::new(IpAddr::from(Ipv4Addr::new(127, 0, 0, 1)), param.port),
+                    param.hs_port,
+                    SocketAddr::new(IpAddr::from(Ipv4Addr::new(127, 0, 0, 1)), param.to_port),
                 )]
                 .iter(),
             )
@@ -223,7 +251,7 @@ impl OwnedTorService {
             .unwrap();
             let onion_url = TorAddress::AddressPort(
                 service_key.public().get_onion_address().to_string(),
-                param.port,
+                param.hs_port,
             );
             let secret_key = service_key.as_bytes();
             Ok(TorHiddenService {
@@ -233,6 +261,15 @@ impl OwnedTorService {
         })
     }
 
+    /// Get the status of the Tor daemon we own
+    /// OwnedTorServiceBootstrapPhase will either be Done or Other(String) containing the stage of
+    /// the boostrap the node is a
+    pub fn get_status(&self) -> Result<OwnedTorServiceBootstrapPhase> {
+        (*RUNTIME).lock().unwrap().block_on(async {
+            let mut ctl = self._ctl.borrow_mut();
+            Ok(ctl.as_mut().unwrap().get_status().await.unwrap())
+        })
+    }
     /// take control conn and drop it.
     /// Closing the owned connection and causes tor daemon to shutdown
     /// Then waits on the Tor daemon thread to exit
@@ -243,12 +280,6 @@ impl OwnedTorService {
         let _ = self._handle.take().unwrap().join();
     }
 }
-
-//impl TorSocksProxy for OwnedTorService {
-//    fn get_socks_port(&self) -> u16 {
-//        self.socks_port
-//    }
-//}
 
 /// High level API for Torut used internally by TorService to expose
 /// note control functions to FFI and user
@@ -263,9 +294,24 @@ where
             let mut input = String::new();
             while !input.trim().contains("PROGRESS=100 TAG=done") {
                 input = self.get_info("status/bootstrap-phase").await.unwrap();
-                std::thread::sleep(std::time::Duration::from_millis(700));
+                std::thread::sleep(std::time::Duration::from_millis(300));
             }
             Ok(true)
+        })
+    }
+    fn get_status(
+        &mut self,
+    ) -> Pin<Box<dyn Future<Output = Result<OwnedTorServiceBootstrapPhase, ()>> + '_>> {
+        // Wait for boostrap to be done
+        Box::pin(async move {
+            let input = self.get_info("status/bootstrap-phase").await.unwrap();
+            if input.trim().contains("TAG=done") {
+                Ok(OwnedTorServiceBootstrapPhase::Done)
+            } else {
+                Ok(OwnedTorServiceBootstrapPhase::Other(BootstrapPhase(
+                    input.trim().into(),
+                )))
+            }
         })
     }
     // dropping the control connection after having taken ownership of the node will cause the node
@@ -275,7 +321,8 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
-
+    use std::io::{Read, Write};
+    use std::net::TcpListener;
     #[tokio::test]
     #[ignore]
     #[serial(tor)]
@@ -297,6 +344,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     #[serial(tor)]
     fn TorService_can_use_run_time_and_convert_to_OwnedTorservice() {
         let service: TorService = TorServiceParam {
@@ -319,34 +367,57 @@ mod tests {
         owned_node.shutdown();
     }
 
-    //#[test]
-    //#[serial(tor)]
-    //fn TorService_create_hidden_service() {
-    //    let service: TorService<_> = TorServiceParam {
-    //        port: 8000,
-    //        socks_port: Some(19054),
-    //        data_dir: String::from("/tmp/torlib3"),
-    //    }
-    //    .into();
-    //    service.bootstrap_and_own(None);
-    //    let mut ctl = service._ctl.borrow_mut().as_ref().unwrap();
+    #[test]
+    #[ignore]
+    #[serial(tor)]
+    fn get_status_of_OwnedTorService() {
+        let service: TorService = TorServiceParam {
+            socks_port: Some(19054),
+            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+        }
+        .into();
+        let mut owned_node = service.to_owned_node(None);
+        let status = owned_node.get_status().unwrap();
+        assert!(matches!(status, OwnedTorServiceBootstrapPhase::Done));
+        owned_node.shutdown();
+    }
+    #[test]
+    #[serial(tor)]
+    fn TorService_create_hidden_service() {
+        let service: TorService = TorServiceParam {
+            socks_port: Some(19054),
+            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+        }
+        .into();
+        let client = utils::get_proxied_client(service.socks_port).unwrap();
+        let mut owned_node = service.to_owned_node(None);
+        let service_key = owned_node
+            .create_hidden_service(TorHiddenServiceParam {
+                to_port: 20000,
+                hs_port: 20011,
+            })
+            .unwrap();
+        assert!(service_key.onion_url.to_string().contains(".onion"));
 
-    //    // FIXME need RunTime or move to ServiceAPI
-    //    let service_key = ctl.create_hidden_service(TorHiddenServiceParam { port: 8080 });
-    //    let client = service.get_client().unwrap();
-    //    (*RUNTIME).lock().unwrap().block_on(async {
-    //        let resp = client
-    //            .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
-    //            .send()
-    //            .await
-    //            .unwrap();
-    //        assert_eq!(resp.status(), 200);
-    //    });
+        // Spawn a lsner to our request and respond with 200
+        let handle = (*RUNTIME).lock().unwrap().spawn(async {
+            let listener = TcpListener::bind("127.0.0.1:20000").unwrap();
+            for stream in listener.incoming() {
+                let mut stream = stream.unwrap();
+                let response = "HTTP/1.1 200 OK\r\n\r\n";
+                stream.write_all(response.as_bytes()).unwrap();
+                stream.flush().unwrap();
+            }
+        });
 
-    //    // take ctl and drop it
-    //    {
-    //        let _ = service._ctl.into_inner().take();
-    //    }
-    //    let _ = service._handle.unwrap().join();
-    //}
+        let mut onion_url =
+            utils::reqwest::Url::parse(&format!("http://{}", service_key.onion_url)).unwrap();
+        let _ = onion_url.set_port(Some(20011 as u16));
+
+        (*RUNTIME).lock().unwrap().block_on(async {
+            let resp = client.get(onion_url).send().await.unwrap();
+            assert_eq!(resp.status(), 200);
+        });
+        owned_node.shutdown();
+    }
 }

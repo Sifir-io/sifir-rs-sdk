@@ -1659,6 +1659,8 @@ dependencies = [
  "cargo-lipo",
  "cbindgen",
  "libc",
+ "serde",
+ "serde_json",
  "tor",
 ]
 
