@@ -17,7 +17,7 @@ fn main() {
         data_dir: String::from("/tmp/sifir_rs_sdk/"),
     }
     .into();
-    let mut owned_node = service.to_owned_node(None);
+    let mut owned_node = service.into_owned_node(None);
     let service_key = owned_node
         .create_hidden_service(TorHiddenServiceParam { to_port, hs_port })
         .unwrap();

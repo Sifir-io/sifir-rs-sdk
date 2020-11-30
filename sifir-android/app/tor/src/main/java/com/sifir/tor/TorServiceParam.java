@@ -3,9 +3,7 @@ package com.sifir.tor;
 
 
 public final class TorServiceParam {
-    static {
-        System.loadLibrary("sifir_android");
-    }
+
     public TorServiceParam(String data_dir, int socks_port) {
         mNativeObj = init(data_dir, socks_port);
     }

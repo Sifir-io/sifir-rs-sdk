@@ -2,7 +2,7 @@ use libc::{c_char, strlen};
 use serde::{Deserialize, Serialize};
 use std::ffi::{CStr, CString};
 use std::panic::catch_unwind;
-use std::{str};
+use std::str;
 use tor::{OwnedTorService, TorServiceParam};
 
 #[repr(C)]
@@ -45,7 +45,7 @@ pub extern "C" fn get_owned_TorService(
             message: ResultMessage::Success,
         })),
         Err(e) => {
-            let message  = match e.downcast::<String>() {
+            let message = match e.downcast::<String>() {
                 Ok(msg) => *msg,
                 Err(_) => String::from("Unknown panic"),
             };
@@ -61,7 +61,7 @@ pub extern "C" fn get_owned_TorService(
 /// Get the status of a OwnedTorService
 pub unsafe extern "C" fn get_status_of_owned_TorService(
     owned_client: *mut OwnedTorService,
-) -> *mut c_char{
+) -> *mut c_char {
     assert!(!owned_client.is_null());
     let owned = &mut *owned_client;
     let node_status = owned.get_status();
@@ -72,7 +72,7 @@ pub unsafe extern "C" fn get_status_of_owned_TorService(
             CString::new(status_string).unwrap().into_raw()
         }
         Err(e) => {
-            let message= match e.downcast::<String>() {
+            let message = match e.downcast::<String>() {
                 Ok(msg) => msg,
                 Err(_) => String::from("Unknown error"),
             };

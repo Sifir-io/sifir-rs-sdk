@@ -1649,6 +1649,8 @@ dependencies = [
  "jni-sys",
  "log",
  "log-panics",
+ "serde",
+ "serde_json",
  "tor",
 ]
 
