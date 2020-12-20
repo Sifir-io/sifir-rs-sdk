@@ -2,7 +2,7 @@
 use anyhow::Result;
 use futures::Future;
 use lazy_static::*;
-use libtor::{Tor, TorAddress, TorFlag};
+use libtor::{LogDestination, Tor, TorAddress, TorBool, TorFlag};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::fs;
@@ -125,7 +125,17 @@ impl From<TorServiceParam> for TorService {
                 "{}/ctl.info",
                 param.data_dir
             )))
-            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True));
+            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
+            .flag(TorFlag::TruncateLogFile(TorBool::True));
+            // FIXME bug in flag or permissions ?
+            //.flag(TorFlag::LogTo(
+            //    libtor::LogLevel::Info,
+            //    libtor::LogDestination::File(format!("{}tor_log.info", param.data_dir)),
+            //))
+            //.flag(TorFlag::LogTo(
+            //    libtor::LogLevel::Err,
+            //    libtor::LogDestination::File(format!("{}tor_log.err", param.data_dir)),
+            //));
 
         let handle = service.start_background();
 
