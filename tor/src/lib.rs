@@ -127,15 +127,15 @@ impl From<TorServiceParam> for TorService {
             )))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
             .flag(TorFlag::TruncateLogFile(TorBool::True));
-            // FIXME bug in flag or permissions ?
-            //.flag(TorFlag::LogTo(
-            //    libtor::LogLevel::Info,
-            //    libtor::LogDestination::File(format!("{}tor_log.info", param.data_dir)),
-            //))
-            //.flag(TorFlag::LogTo(
-            //    libtor::LogLevel::Err,
-            //    libtor::LogDestination::File(format!("{}tor_log.err", param.data_dir)),
-            //));
+        // FIXME bug in flag or permissions ?
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Info,
+        //    libtor::LogDestination::File(format!("{}tor_log.info", param.data_dir)),
+        //))
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Err,
+        //    libtor::LogDestination::File(format!("{}tor_log.err", param.data_dir)),
+        //));
 
         let handle = service.start_background();
 
