@@ -27,8 +27,7 @@ type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(
 type G = AuthenticatedConn<TcpStream, F>;
 lazy_static! {
     static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
-        tokio::runtime::Builder::new()
-            .threaded_scheduler()
+        tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .unwrap()
@@ -71,6 +70,7 @@ pub struct OwnedTorService {
 pub struct TorHiddenServiceParam {
     pub to_port: u16,
     pub hs_port: u16,
+    pub secret_key: Option<[u8; 64]>,
 }
 
 pub struct TorHiddenService {
@@ -127,15 +127,15 @@ impl From<TorServiceParam> for TorService {
             )))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
             .flag(TorFlag::TruncateLogFile(TorBool::True));
-            // FIXME bug in flag or permissions ?
-            //.flag(TorFlag::LogTo(
-            //    libtor::LogLevel::Info,
-            //    libtor::LogDestination::File(format!("{}tor_log.info", param.data_dir)),
-            //))
-            //.flag(TorFlag::LogTo(
-            //    libtor::LogLevel::Err,
-            //    libtor::LogDestination::File(format!("{}tor_log.err", param.data_dir)),
-            //));
+        // FIXME bug in flag or permissions ?
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Info,
+        //    libtor::LogDestination::File(format!("{}tor_log.info", param.data_dir)),
+        //))
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Err,
+        //    libtor::LogDestination::File(format!("{}tor_log.err", param.data_dir)),
+        //));
 
         let handle = service.start_background();
 
@@ -239,7 +239,13 @@ impl OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut _ctl = self._ctl.borrow_mut();
             let ctl = _ctl.as_mut().unwrap();
-            let service_key = TorSecretKeyV3::generate();
+            let service_key = {
+                if param.secret_key.is_some() {
+                    param.secret_key.unwrap().into()
+                } else {
+                    TorSecretKeyV3::generate()
+                }
+            };
             ctl.add_onion_v3(
                 &service_key,
                 false,
@@ -399,9 +405,11 @@ mod tests {
             .create_hidden_service(TorHiddenServiceParam {
                 to_port: 20000,
                 hs_port: 20011,
+                secret_key: None,
             })
             .unwrap();
-        assert!(service_key.onion_url.to_string().contains(".onion"));
+        let url = service_key.onion_url.to_string();
+        assert!(url.contains(".onion"));
 
         // Spawn a lsner to our request and respond with 200
         let handle = (*RUNTIME).lock().unwrap().spawn(async {
