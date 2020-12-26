@@ -74,6 +74,7 @@ pub struct OwnedTorService {
 pub struct TorHiddenServiceParam {
     pub to_port: u16,
     pub hs_port: u16,
+    pub secret_key: Option<[u8; 64]>,
 }
 
 pub struct TorHiddenService {
@@ -242,7 +243,13 @@ impl OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut _ctl = self._ctl.borrow_mut();
             let ctl = _ctl.as_mut().unwrap();
-            let service_key = TorSecretKeyV3::generate();
+            let service_key = {
+                if param.secret_key.is_some() {
+                    param.secret_key.unwrap().into()
+                } else {
+                    TorSecretKeyV3::generate()
+                }
+            };
             ctl.add_onion_v3(
                 &service_key,
                 false,
@@ -404,6 +411,7 @@ mod tests {
             .create_hidden_service(TorHiddenServiceParam {
                 to_port: 20000,
                 hs_port: 20011,
+                secret_key: None
             })
             .unwrap();
         assert!(service_key.onion_url.to_string().contains(".onion"));
