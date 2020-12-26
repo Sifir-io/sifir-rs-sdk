@@ -453,21 +453,6 @@ mod tests {
         (*RUNTIME).lock().unwrap().block_on(async {
             lsnr_handle.await.unwrap();
         });
-        // let n = conn.write_all("{ \"id\": 0, \"method\": \"server.version\", \"params\": [ \"1.9.5\", \"0.6\" ] }\n".as_bytes()).unwrap();
-       // let n = conn.write_all("{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n".as_bytes()).unwrap();
-       // conn.flush().unwrap();
-       // let mut buf = Vec::new();
-       // // let mut resp_string = String::new();
-       // // conn.set_read_timeout(Some(Duration::from_millis(9000)))
-       // //     .unwrap();
-       // println!("Starting to read..");
-       // // loop {
-       // let n = conn.read_to_end(&mut buf).unwrap();
-       // let resp_string = String::from_utf8_lossy(&buf);
-       // println!("Read {} with string: {}", n, resp_string);
-       // // std::thread::sleep(std::time::Duration::from_millis(1000));
-       // // }
-       // assert_eq!(resp_string.contains("jsonrpc"), true);
         owned_node.shutdown();
     }
 }
