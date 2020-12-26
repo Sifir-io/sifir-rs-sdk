@@ -4,6 +4,7 @@ use futures::Future;
 use lazy_static::*;
 use libtor::{LogDestination, Tor, TorAddress, TorBool, TorFlag};
 use serde::{Deserialize, Serialize};
+use socks::Socks5Stream;
 use std::cell::RefCell;
 use std::fs;
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
@@ -13,7 +14,9 @@ use std::thread::JoinHandle;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
-
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::BufWriter;
 /// TODO implement this for hidden service
 pub enum CallBackResult {
     Success(String),
@@ -127,15 +130,15 @@ impl From<TorServiceParam> for TorService {
             )))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
             .flag(TorFlag::TruncateLogFile(TorBool::True));
-            // FIXME bug in flag or permissions ?
-            //.flag(TorFlag::LogTo(
-            //    libtor::LogLevel::Info,
-            //    libtor::LogDestination::File(format!("{}tor_log.info", param.data_dir)),
-            //))
-            //.flag(TorFlag::LogTo(
-            //    libtor::LogLevel::Err,
-            //    libtor::LogDestination::File(format!("{}tor_log.err", param.data_dir)),
-            //));
+        // FIXME bug in flag or permissions ?
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Info,
+        //    libtor::LogDestination::File(format!("{}tor_log.info", param.data_dir)),
+        //))
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Err,
+        //    libtor::LogDestination::File(format!("{}tor_log.err", param.data_dir)),
+        //));
 
         let handle = service.start_background();
 
@@ -327,8 +330,10 @@ where
 mod tests {
     use super::*;
     use serial_test::serial;
-    use std::io::Write;
-    use std::net::TcpListener;
+    use socks::{Socks5Datagram, ToTargetAddr};
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, ToSocketAddrs};
+    use tokio::time::Duration;
 
     #[tokio::test]
     #[serial(tor)]
@@ -422,6 +427,47 @@ mod tests {
             let resp = client.get(onion_url).send().await.unwrap();
             assert_eq!(resp.status(), 200);
         });
+        owned_node.shutdown();
+    }
+    #[test]
+    #[serial(tor)]
+    fn TorService_can_connect_raw_stream() {
+        let service: TorService = TorServiceParam {
+            socks_port: Some(19054),
+            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+        }
+        .into();
+        let mut owned_node = service.into_owned_node(None);
+
+        let target = "udfpzbte2hommnvag5f3qlouqkhvp3xybhlus2yvfeqdwlhjroe4bbyd.onion:60001";
+        let mut conn = Socks5Stream::connect("127.0.0.1:19054", target).unwrap().into_inner();
+        let mut reader = BufReader::new(conn.try_clone().unwrap());
+        let mut writer = BufReader::new(conn.try_clone().unwrap());
+        let mut string_buf = String::new();
+
+        let lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
+            reader.read_line(&mut string_buf);
+            println!("Got {}",string_buf);
+        });
+        let n = writer.into_inner().write_all("{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n".as_bytes()).unwrap();
+        (*RUNTIME).lock().unwrap().block_on(async {
+            lsnr_handle.await.unwrap();
+        });
+        // let n = conn.write_all("{ \"id\": 0, \"method\": \"server.version\", \"params\": [ \"1.9.5\", \"0.6\" ] }\n".as_bytes()).unwrap();
+       // let n = conn.write_all("{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n".as_bytes()).unwrap();
+       // conn.flush().unwrap();
+       // let mut buf = Vec::new();
+       // // let mut resp_string = String::new();
+       // // conn.set_read_timeout(Some(Duration::from_millis(9000)))
+       // //     .unwrap();
+       // println!("Starting to read..");
+       // // loop {
+       // let n = conn.read_to_end(&mut buf).unwrap();
+       // let resp_string = String::from_utf8_lossy(&buf);
+       // println!("Read {} with string: {}", n, resp_string);
+       // // std::thread::sleep(std::time::Duration::from_millis(1000));
+       // // }
+       // assert_eq!(resp_string.contains("jsonrpc"), true);
         owned_node.shutdown();
     }
 }

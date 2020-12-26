@@ -1703,6 +1703,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "socks"
+version = "0.3.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "30f86c7635fadf2814201a4f67efefb0007588ae7422ce299f354ab5c97f61ae"
+dependencies = [
+ "byteorder",
+ "libc",
+ "winapi 0.2.8",
+ "ws2_32-sys",
+]
+
+[[package]]
 name = "strsim"
 version = "0.8.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1961,6 +1973,7 @@ dependencies = [
  "libtor",
  "serde",
  "serial_test",
+ "socks",
  "tokio",
  "torut",
  "utils",

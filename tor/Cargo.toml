@@ -15,7 +15,7 @@ anyhow = "1.0.33"
 serde = { version="1.0.117", features = ["derive"]}
 lazy_static = "1.4.0"
 futures = { version="0.3.8", default-features = false}
-
+socks = { version = "0.3.3"}
 [dev-dependencies]
 serial_test = "*"
 utils = { path = "../utils" }
