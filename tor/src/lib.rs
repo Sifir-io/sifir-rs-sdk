@@ -5,18 +5,21 @@ use lazy_static::*;
 use libtor::{LogDestination, Tor, TorAddress, TorBool, TorFlag};
 use serde::{Deserialize, Serialize};
 use socks::Socks5Stream;
+use socks::{Socks5Datagram, ToTargetAddr};
 use std::cell::RefCell;
 use std::fs;
+use std::io::BufRead;
+use std::io::BufReader;
+use std::io::BufWriter;
+use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{TcpListener, ToSocketAddrs};
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::thread::JoinHandle;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::io::BufWriter;
 /// TODO implement this for hidden service
 pub enum CallBackResult {
     Success(String),
@@ -82,6 +85,10 @@ pub struct TorHiddenService {
     pub secret_key: [u8; 64],
 }
 
+pub struct MsgOverTcp {
+    target: String,
+    msg: String,
+}
 //trait TorSocksProxy {
 //    fn get_socks_port(&self) -> u16;
 //}
@@ -294,6 +301,28 @@ impl OwnedTorService {
         }
         let _ = self._handle.take().unwrap().join();
     }
+    /// Note: param.msg is converted to .as_bytes here. Idea is most of this is coming across FFI so b64 > binary
+    pub fn msg_over_tcp(&self, param: MsgOverTcp) -> Result<String> {
+        let mut conn = Socks5Stream::connect("127.0.0.1:19054", param.target.as_str())
+            .unwrap()
+            .into_inner();
+        let mut reader = BufReader::new(conn.try_clone()?);
+        let lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
+            println!("lsnr_handle!");
+            let mut string_buf = String::new();
+            let result = reader.read_line(&mut string_buf).unwrap();
+            println!("bufff: {}", string_buf);
+            string_buf
+        });
+        conn.write_all(param.msg.as_bytes())?;
+        // FIXME this should be another spawn with a callback ?
+        let result = (*RUNTIME)
+            .lock()
+            .unwrap()
+            .block_on(async { lsnr_handle.await.unwrap() });
+        println!("after block");
+        Ok(result)
+    }
 }
 
 /// High level API for Torut used internally by TorService to expose
@@ -338,6 +367,7 @@ mod tests {
     use super::*;
     use serial_test::serial;
     use socks::{Socks5Datagram, ToTargetAddr};
+    use std::borrow::Borrow;
     use std::io::{Read, Write};
     use std::net::{TcpListener, ToSocketAddrs};
     use tokio::time::Duration;
@@ -411,7 +441,7 @@ mod tests {
             .create_hidden_service(TorHiddenServiceParam {
                 to_port: 20000,
                 hs_port: 20011,
-                secret_key: None
+                secret_key: None,
             })
             .unwrap();
         assert!(service_key.onion_url.to_string().contains(".onion"));
@@ -448,19 +478,21 @@ mod tests {
         let mut owned_node = service.into_owned_node(None);
 
         let target = "udfpzbte2hommnvag5f3qlouqkhvp3xybhlus2yvfeqdwlhjroe4bbyd.onion:60001";
-        let mut conn = Socks5Stream::connect("127.0.0.1:19054", target).unwrap().into_inner();
-        let mut reader = BufReader::new(conn.try_clone().unwrap());
-        let mut writer = BufReader::new(conn.try_clone().unwrap());
-        let mut string_buf = String::new();
-
-        let lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
-            reader.read_line(&mut string_buf);
-            println!("Got {}",string_buf);
-        });
-        let n = writer.into_inner().write_all("{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n".as_bytes()).unwrap();
-        (*RUNTIME).lock().unwrap().block_on(async {
-            lsnr_handle.await.unwrap();
-        });
+        let msg = "{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n";
+        let reply = owned_node
+            .msg_over_tcp(MsgOverTcp {
+                target: target.into(),
+                msg: msg.into(),
+            })
+            .unwrap();
+        assert_eq!(reply.contains("rpc"), true);
+        let reply = owned_node
+            .msg_over_tcp(MsgOverTcp {
+                target: target.into(),
+                msg: msg.into(),
+            })
+            .unwrap();
+        assert_eq!(reply.contains("rpc"), true);
         owned_node.shutdown();
     }
 }
