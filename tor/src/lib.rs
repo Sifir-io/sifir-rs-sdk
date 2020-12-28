@@ -303,9 +303,11 @@ impl OwnedTorService {
     }
     /// Note: param.msg is converted to .as_bytes here. Idea is most of this is coming across FFI so b64 > binary
     pub fn msg_over_tcp(&self, param: MsgOverTcp) -> Result<String> {
-        let mut conn = Socks5Stream::connect("127.0.0.1:19054", param.target.as_str())
+        let proxy = format!("127.0.0.1:{}", self.socks_port);
+        let mut conn = Socks5Stream::connect(proxy.as_str(), param.target.as_str())
             .unwrap()
             .into_inner();
+        // Setup lnser before sending
         let mut reader = BufReader::new(conn.try_clone()?);
         let lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
             println!("lsnr_handle!");
@@ -315,7 +317,7 @@ impl OwnedTorService {
             string_buf
         });
         conn.write_all(param.msg.as_bytes())?;
-        // FIXME this should be another spawn with a callback ?
+        // TODO change this to spawn with callback not to block thread while waiting
         let result = (*RUNTIME)
             .lock()
             .unwrap()
