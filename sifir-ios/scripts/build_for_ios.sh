@@ -14,6 +14,9 @@ if [[ "$1" == "release" ]]; then
 	echo "### Building Release ###"
 fi
 
+# Build local (+ FFI)
+cargo  build -p sifir-ios --"$target";
+
 export IPHONEOS_DEPLOYMENT_TARGET="11.1"
 
 #cargo +nightly build -p sifir-ios --target x86_64-apple-ios --"$target";
@@ -22,6 +25,7 @@ cargo  build -p sifir-ios --target x86_64-apple-ios --"$target";
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 cargo  build -p sifir-ios --target aarch64-apple-ios --"$target";
+retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 
 [ -z $target ] && target="debug";
@@ -38,6 +42,7 @@ lipo -create ../../target/aarch64-apple-ios/"$target"/libsifir_ios.dylib ../../t
 [ ! $retVal -eq 0 ] && exit 1;
 
 # Update dylib rpath
+# FIXME - framework: path, directory, infolib file
 install_name_tool -id "@rpath/libsifir_ios.dylib" ../output/"$target"/universal/libsifir_ios.dylib
 
 # Output sizes

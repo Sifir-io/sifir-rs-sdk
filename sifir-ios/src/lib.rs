@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use std::ffi::{CStr, CString};
 use std::panic::catch_unwind;
 use std::str;
-use tor::{OwnedTorService, TorServiceParam};
+use tor::{MsgOverTcp, OwnedTorService, TorServiceParam};
 
 #[repr(C)]
 enum ResultMessage {
@@ -69,6 +69,47 @@ pub unsafe extern "C" fn get_status_of_owned_TorService(
         Ok(status) => {
             let status_string = serde_json::to_string(&status).unwrap();
             println!("status is {}", status_string);
+            CString::new(status_string).unwrap().into_raw()
+        }
+        Err(e) => {
+            let message = match e.downcast::<String>() {
+                Ok(msg) => msg,
+                Err(_) => String::from("Unknown error"),
+            };
+            CString::new(message).unwrap().into_raw()
+        }
+    }
+}
+#[no_mangle]
+///# Safety
+/// Get the status of a OwnedTorService
+pub unsafe extern "C" fn msg_over_tcp(
+    owned_client: *mut OwnedTorService,
+    target: *const c_char,
+    msg: *const c_char,
+) -> *mut c_char {
+    assert!(!owned_client.is_null());
+    let owned = &mut *owned_client;
+
+    let msg_str: String = unsafe { CStr::from_ptr(msg) }
+        .to_str()
+        .expect("Could not get str from msg")
+        .into();
+
+    let target_str: String = unsafe { CStr::from_ptr(target) }
+        .to_str()
+        .expect("Could not get str from target")
+        .into();
+
+    let msg_reply = owned.msg_over_tcp(MsgOverTcp {
+        target: target_str,
+        msg: msg_str,
+    });
+
+    match msg_reply {
+        Ok(reply) => {
+            let status_string = serde_json::to_string(&reply).unwrap();
+            println!("reply is {}", status_string);
             CString::new(status_string).unwrap().into_raw()
         }
         Err(e) => {

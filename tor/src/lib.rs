@@ -85,9 +85,10 @@ pub struct TorHiddenService {
     pub secret_key: [u8; 64],
 }
 
+#[repr(C)]
 pub struct MsgOverTcp {
-    target: String,
-    msg: String,
+    pub target: String,
+    pub msg: String,
 }
 //trait TorSocksProxy {
 //    fn get_socks_port(&self) -> u16;
