@@ -33,8 +33,7 @@ type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(
 type G = AuthenticatedConn<TcpStream, F>;
 lazy_static! {
     static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
-        tokio::runtime::Builder::new()
-            .threaded_scheduler()
+        tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .unwrap()
@@ -302,7 +301,10 @@ impl OwnedTorService {
         }
         let _ = self._handle.take().unwrap().join();
     }
-    /// Note: param.msg is converted to .as_bytes here. Idea is most of this is coming across FFI so b64 > binary
+    /// Send a message through Socks5 proxy over a Raw TCP socket
+    /// Connections are not persistant 
+    /// Note: param.msg is converted to .as_bytes here. Idea is most of this is coming across FFI so b64 > binary for cross
+    /// barrier compatiblity
     pub fn msg_over_tcp(&self, param: MsgOverTcp) -> Result<String> {
         let proxy = format!("127.0.0.1:{}", self.socks_port);
         let mut conn = Socks5Stream::connect(proxy.as_str(), param.target.as_str())
@@ -311,10 +313,8 @@ impl OwnedTorService {
         // Setup lnser before sending
         let mut reader = BufReader::new(conn.try_clone()?);
         let lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
-            println!("lsnr_handle!");
             let mut string_buf = String::new();
-            let result = reader.read_line(&mut string_buf).unwrap();
-            println!("bufff: {}", string_buf);
+            let _ = reader.read_line(&mut string_buf).unwrap();
             string_buf
         });
         conn.write_all(param.msg.as_bytes())?;
@@ -323,7 +323,6 @@ impl OwnedTorService {
             .lock()
             .unwrap()
             .block_on(async { lsnr_handle.await.unwrap() });
-        println!("after block");
         Ok(result)
     }
 }
@@ -373,26 +372,25 @@ mod tests {
     use std::borrow::Borrow;
     use std::io::{Read, Write};
     use std::net::{TcpListener, ToSocketAddrs};
-    use tokio::time::Duration;
 
-    #[tokio::test]
-    #[serial(tor)]
-    async fn get_from_param_and_await_boostrap_using_TorControlApi() {
-        let service: TorService = TorServiceParam {
-            socks_port: Some(19051),
-            data_dir: String::from("/tmp/torlib2"),
-        }
-        .into();
-        assert_eq!(service.socks_port, 19051);
-        assert_eq!(service.control_port.contains("127.0.0.1:"), true);
-        assert_eq!(service._handle.is_some(), true);
-        let mut control_conn = service.get_control_auth_conn(Some(handler)).await;
-        let bootsraped = control_conn.wait_bootstrap().await.unwrap();
-        assert_eq!(bootsraped, true);
-        control_conn.take_ownership().await.unwrap();
-        control_conn.shutdown();
-        let _ = service._handle.unwrap().join();
-    }
+    //#[tokio::test]
+    //#[serial(tor)]
+    //async fn get_from_param_and_await_boostrap_using_TorControlApi() {
+    //    let service: TorService = TorServiceParam {
+    //        socks_port: Some(19051),
+    //        data_dir: String::from("/tmp/torlib2"),
+    //    }
+    //    .into();
+    //    assert_eq!(service.socks_port, 19051);
+    //    assert_eq!(service.control_port.contains("127.0.0.1:"), true);
+    //    assert_eq!(service._handle.is_some(), true);
+    //    let mut control_conn = service.get_control_auth_conn(Some(handler)).await;
+    //    let bootsraped = control_conn.wait_bootstrap().await.unwrap();
+    //    assert_eq!(bootsraped, true);
+    //    control_conn.take_ownership().await.unwrap();
+    //    control_conn.shutdown();
+    //    let _ = service._handle.unwrap().join();
+    //}
 
     #[test]
     #[serial(tor)]
