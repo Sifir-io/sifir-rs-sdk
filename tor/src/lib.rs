@@ -302,28 +302,46 @@ impl OwnedTorService {
         let _ = self._handle.take().unwrap().join();
     }
     /// Send a message through Socks5 proxy over a Raw TCP socket
-    /// Connections are not persistant 
+    /// Connections are not persistant
     /// Note: param.msg is converted to .as_bytes here. Idea is most of this is coming across FFI so b64 > binary for cross
     /// barrier compatiblity
-    pub fn msg_over_tcp(&self, param: MsgOverTcp) -> Result<String> {
+    /// If a callback is supplied will call the callback when the result is ready
+    /// otherwise will block until it recieves a reply and return it.
+    pub fn msg_over_tcp<F>(&self, param: MsgOverTcp,callback:Option<F>)
+        -> anyhow::Result<Option<String>> where F:FnOnce(String) + Send + 'static,
+    {
         let proxy = format!("127.0.0.1:{}", self.socks_port);
         let mut conn = Socks5Stream::connect(proxy.as_str(), param.target.as_str())
             .unwrap()
             .into_inner();
         // Setup lnser before sending
         let mut reader = BufReader::new(conn.try_clone()?);
+        let callback_is_none = callback.is_none();
         let lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
             let mut string_buf = String::new();
             let _ = reader.read_line(&mut string_buf).unwrap();
-            string_buf
+            match callback{
+                Some(cb)=>{
+                    cb(string_buf);
+                    None
+                },
+                _=>{
+                   Some(string_buf)
+                }
+            }
         });
-        conn.write_all(param.msg.as_bytes())?;
-        // TODO change this to spawn with callback not to block thread while waiting
-        let result = (*RUNTIME)
-            .lock()
-            .unwrap()
-            .block_on(async { lsnr_handle.await.unwrap() });
-        Ok(result)
+        conn.write_all(param.msg.as_bytes()).unwrap();
+
+        if callback_is_none {
+            let result = (*RUNTIME)
+                .lock()
+                .unwrap()
+                .block_on(async { lsnr_handle.await.unwrap() });
+            Ok(result)
+        } else {
+            Ok(None)
+        }
+
     }
 }
 
@@ -480,20 +498,20 @@ mod tests {
 
         let target = "udfpzbte2hommnvag5f3qlouqkhvp3xybhlus2yvfeqdwlhjroe4bbyd.onion:60001";
         let msg = "{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n";
-        let reply = owned_node
+
+        // Test callback interface
+         owned_node
             .msg_over_tcp(MsgOverTcp {
                 target: target.into(),
                 msg: msg.into(),
-            })
-            .unwrap();
-        assert_eq!(reply.contains("rpc"), true);
-        let reply = owned_node
-            .msg_over_tcp(MsgOverTcp {
-                target: target.into(),
-                msg: msg.into(),
-            })
-            .unwrap();
-        assert_eq!(reply.contains("rpc"), true);
+            },Some(|reply:String| {
+                assert_eq!(reply.contains("rpc"), true);
+            })).unwrap();
+
+        // Test blocking interface
+        let reply : Result<Option<String>> = owned_node
+            .msg_over_tcp(MsgOverTcp { target: target.into(), msg: msg.into() },None::<fn(String)>);
+        assert_eq!(reply.unwrap().unwrap().contains("rpc"),true);
         owned_node.shutdown();
     }
 }

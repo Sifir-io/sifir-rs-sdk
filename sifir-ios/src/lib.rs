@@ -87,7 +87,8 @@ pub unsafe extern "C" fn msg_over_tcp(
     owned_client: *mut OwnedTorService,
     target: *const c_char,
     msg: *const c_char,
-) -> *mut c_char {
+    ffi_callback: fn(CString)
+)  {
     assert!(!owned_client.is_null());
     let owned = &mut *owned_client;
 
@@ -101,25 +102,26 @@ pub unsafe extern "C" fn msg_over_tcp(
         .expect("Could not get str from target")
         .into();
 
-    let msg_reply = owned.msg_over_tcp(MsgOverTcp {
+    owned.msg_over_tcp(MsgOverTcp {
         target: target_str,
         msg: msg_str,
-    });
-
-    match msg_reply {
-        Ok(reply) => {
-            let status_string = serde_json::to_string(&reply).unwrap();
-            println!("reply is {}", status_string);
-            CString::new(status_string).unwrap().into_raw()
-        }
-        Err(e) => {
-            let message = match e.downcast::<String>() {
-                Ok(msg) => msg,
-                Err(_) => String::from("Unknown error"),
-            };
-            CString::new(message).unwrap().into_raw()
-        }
-    }
+    },Some(move |reply:String|{
+        ffi_callback(CString::new(reply).unwrap())
+    })).unwrap();
+   // match msg_reply {
+   //     Ok(reply) => {
+   //         let status_string = serde_json::to_string(&reply).unwrap();
+   //         println!("reply is {}", status_string);
+   //         CString::new(status_string).unwrap().into_raw()
+   //     }
+   //     Err(e) => {
+   //         let message = match e.downcast::<String>() {
+   //             Ok(msg) => msg,
+   //             Err(_) => String::from("Unknown error"),
+   //         };
+   //         CString::new(message).unwrap().into_raw()
+   //     }
+   // }
 }
 
 #[no_mangle]
