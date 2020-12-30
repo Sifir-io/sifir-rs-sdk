@@ -13,7 +13,7 @@ fn main() {
     }
     .into();
     println!("---------Starting Tor Daemon and Socks Port ------");
-    let mut owned_node = service.into_owned_node(None);
+    let mut owned_node = service.into_owned_node();
     loop {
         println!("Enter a port to foward onion:");
         let mut port = String::new();

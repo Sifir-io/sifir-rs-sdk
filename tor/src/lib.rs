@@ -1,16 +1,13 @@
+pub mod tcp_stream;
+
 // use crate::utils;
 use anyhow::Result;
 use futures::Future;
 use lazy_static::*;
 use libtor::{LogDestination, Tor, TorAddress, TorBool, TorFlag};
 use serde::{Deserialize, Serialize};
-use socks::Socks5Stream;
-use socks::{Socks5Datagram, ToTargetAddr};
 use std::cell::RefCell;
 use std::fs;
-use std::io::BufRead;
-use std::io::BufReader;
-use std::io::BufWriter;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::net::{TcpListener, ToSocketAddrs};
@@ -20,19 +17,11 @@ use std::thread::JoinHandle;
 use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
-/// TODO implement this for hidden service
-pub enum CallBackResult {
-    Success(String),
-    Error(String),
-}
-pub trait CallBack {
-    fn on_state_changed(&self, result: CallBackResult);
-}
 
 type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>>;
 type G = AuthenticatedConn<TcpStream, F>;
 lazy_static! {
-    static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
+    pub static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
         tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
@@ -212,7 +201,7 @@ impl TorService {
     /// Converts TorService to OwnedTorService, consuming the TorService
     /// and returning an OwnedTorService which is fully bootstrapped and under our control
     /// (If we drop this object the Tor daemon will shut down)
-    pub fn into_owned_node(self, callback: Option<Box<dyn CallBack>>) -> OwnedTorService {
+    pub fn into_owned_node(self) -> OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut ac = self
                 .get_control_auth_conn(Some(Box::new(handler) as F))
@@ -232,7 +221,7 @@ impl TorService {
 impl From<TorServiceParam> for OwnedTorService {
     fn from(param: TorServiceParam) -> Self {
         let t: TorService = param.into();
-        t.into_owned_node(None)
+        t.into_owned_node()
     }
 }
 
@@ -301,50 +290,7 @@ impl OwnedTorService {
         }
         let _ = self._handle.take().unwrap().join();
     }
-    /// Send a message through Socks5 proxy over a Raw TCP socket
-    /// Connections are not persistant
-    /// Note: param.msg is converted to .as_bytes here. Idea is most of this is coming across FFI so b64 > binary for cross
-    /// barrier compatiblity
-    /// If a callback is supplied will call the callback when the result is ready
-    /// otherwise will block until it recieves a reply and return it.
-    pub fn msg_over_tcp<F>(&self, param: MsgOverTcp,callback:Option<F>)
-        -> anyhow::Result<Option<String>> where F:FnOnce(String) + Send + 'static,
-    {
-        let proxy = format!("127.0.0.1:{}", self.socks_port);
-        let mut conn = Socks5Stream::connect(proxy.as_str(), param.target.as_str())
-            .unwrap()
-            .into_inner();
-        // Setup lnser before sending
-        let mut reader = BufReader::new(conn.try_clone()?);
-        let callback_is_none = callback.is_none();
-        let lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
-            let mut string_buf = String::new();
-            let _ = reader.read_line(&mut string_buf).unwrap();
-            match callback{
-                Some(cb)=>{
-                    cb(string_buf);
-                    None
-                },
-                _=>{
-                   Some(string_buf)
-                }
-            }
-        });
-        conn.write_all(param.msg.as_bytes()).unwrap();
-
-        if callback_is_none {
-            let result = (*RUNTIME)
-                .lock()
-                .unwrap()
-                .block_on(async { lsnr_handle.await.unwrap() });
-            Ok(result)
-        } else {
-            Ok(None)
-        }
-
-    }
 }
-
 /// High level API for Torut used internally by TorService to expose
 /// note control functions to FFI and user
 impl<F, H> TorControlApi for AuthenticatedConn<TcpStream, H>
@@ -402,7 +348,7 @@ mod tests {
     //    assert_eq!(service.socks_port, 19051);
     //    assert_eq!(service.control_port.contains("127.0.0.1:"), true);
     //    assert_eq!(service._handle.is_some(), true);
-    //    let mut control_conn = service.get_control_auth_conn(Some(handler)).await;
+    //    let mut control_conn = service.get_control_auth_conn(Some(hand//ler)).await;
     //    let bootsraped = control_conn.wait_bootstrap().await.unwrap();
     //    assert_eq!(bootsraped, true);
     //    control_conn.take_ownership().await.unwrap();
@@ -420,7 +366,7 @@ mod tests {
         .into();
         let client = utils::get_proxied_client(service.socks_port).unwrap();
 
-        let mut owned_node = service.into_owned_node(None);
+        let mut owned_node = service.into_owned_node();
         (*RUNTIME).lock().unwrap().block_on(async {
             let resp = client
                 .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
@@ -441,7 +387,7 @@ mod tests {
             data_dir: String::from("/tmp/sifir_rs_sdk/"),
         }
         .into();
-        let mut owned_node = service.into_owned_node(None);
+        let mut owned_node = service.into_owned_node();
         let status = owned_node.get_status().unwrap();
         assert!(matches!(status, OwnedTorServiceBootstrapPhase::Done));
         owned_node.shutdown();
@@ -455,7 +401,7 @@ mod tests {
         }
         .into();
         let client = utils::get_proxied_client(service.socks_port).unwrap();
-        let mut owned_node = service.into_owned_node(None);
+        let mut owned_node = service.into_owned_node();
         let service_key = owned_node
             .create_hidden_service(TorHiddenServiceParam {
                 to_port: 20000,
@@ -484,34 +430,6 @@ mod tests {
             let resp = client.get(onion_url).send().await.unwrap();
             assert_eq!(resp.status(), 200);
         });
-        owned_node.shutdown();
-    }
-    #[test]
-    #[serial(tor)]
-    fn TorService_can_connect_raw_stream() {
-        let service: TorService = TorServiceParam {
-            socks_port: Some(19054),
-            data_dir: String::from("/tmp/sifir_rs_sdk/"),
-        }
-        .into();
-        let mut owned_node = service.into_owned_node(None);
-
-        let target = "udfpzbte2hommnvag5f3qlouqkhvp3xybhlus2yvfeqdwlhjroe4bbyd.onion:60001";
-        let msg = "{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n";
-
-        // Test callback interface
-         owned_node
-            .msg_over_tcp(MsgOverTcp {
-                target: target.into(),
-                msg: msg.into(),
-            },Some(|reply:String| {
-                assert_eq!(reply.contains("rpc"), true);
-            })).unwrap();
-
-        // Test blocking interface
-        let reply : Result<Option<String>> = owned_node
-            .msg_over_tcp(MsgOverTcp { target: target.into(), msg: msg.into() },None::<fn(String)>);
-        assert_eq!(reply.unwrap().unwrap().contains("rpc"),true);
         owned_node.shutdown();
     }
 }
