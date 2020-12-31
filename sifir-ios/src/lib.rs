@@ -11,8 +11,6 @@ enum ResultMessage {
     Error(*mut c_char),
 }
 #[repr(C)]
-/// Since the FFI simply starts and shutdowns the daemon we use an
-/// Opaque pointer here to pass across the FFI
 pub struct BoxedResult<T> {
     result: Option<Box<T>>,
     message: ResultMessage,

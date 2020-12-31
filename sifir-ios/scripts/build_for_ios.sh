@@ -17,7 +17,7 @@ fi
 # Build local (+ FFI)
 cargo  build -p sifir-ios --"$target";
 
-export IPHONEOS_DEPLOYMENT_TARGET="14.1"
+export IPHONEOS_DEPLOYMENT_TARGET="11.0"
 
 #cargo +nightly build -p sifir-ios --target x86_64-apple-ios --"$target";
 #cargo +nightly build -p sifir-ios --target aarch64-apple-ios --"$target";
