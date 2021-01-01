@@ -1,10 +1,10 @@
 use jni_sys::*;
 use serde::Serialize;
-use std::sync::Mutex;
 use tor::{
     tcp_stream::{DataObserver, TcpSocksStream},
     BootstrapPhase, OwnedTorService, OwnedTorServiceBootstrapPhase, TorServiceParam,
 };
+use std::time::Duration;
 
 foreign_class!(class TorServiceParam {
     self_type TorServiceParam;
@@ -69,7 +69,8 @@ foreign_class!(class TcpSocksStream {
        cb,
       }).unwrap();
     }
-    fn send_data(&mut self, msg:String){
-        this.send_data(msg).unwrap();
+    fn send_data(&mut self, msg:String,timeout:u64){
+        this.send_data(msg, Some(Duration::new(timeout, 0))).unwrap()
+        // this.send_data(msg).unwrap();
     }
 });

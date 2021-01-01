@@ -14,10 +14,10 @@ public final class TcpSocksStream {
     }
     private static native void do_on_data(long self, DataObserver cb);
 
-    public final void send_data(String msg) {
-        do_send_data(mNativeObj, msg);
+    public final void send_data(String msg, long timeout) {
+        do_send_data(mNativeObj, msg, timeout);
     }
-    private static native void do_send_data(long self, String msg);
+    private static native void do_send_data(long self, String msg, long timeout);
 
     public synchronized void delete() {
         if (mNativeObj != 0) {
