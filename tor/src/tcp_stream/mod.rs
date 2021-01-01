@@ -31,15 +31,24 @@ impl TcpSocksStream {
     where
         F: DataObserver + Send + 'static,
     {
-        // pub fn on_data<F>(&self,mut callback:F)-> anyhow::Result<()> where F:FnMut(String) + Send + 'static {
         let tcp_stream = self.stream.get_ref();
         let mut reader = BufReader::new(tcp_stream.try_clone()?);
         let lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
             loop {
                 let mut string_buf = String::new();
-                let _ = reader.read_line(&mut string_buf).unwrap();
-                println!("READDERRR {}", string_buf);
-                callback.on_data(string_buf);
+                match reader.read_line(&mut string_buf) {
+                    Ok(_) => {
+                        if string_buf == ""{
+                            callback.on_error(String::from("EOF"));
+                            break;
+                        } else {
+                            callback.on_data(string_buf)
+                        }
+                    },
+                    Err(e) => {
+                        callback.on_error(e.to_string())
+                    },
+                }
             }
         });
         Ok(())

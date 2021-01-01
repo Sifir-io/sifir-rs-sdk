@@ -5,6 +5,7 @@ fn main() {
     cbindgen::Builder::new()
         .with_crate(crate_dir)
         .with_language(C)
+        .with_include("sifir_typedef.h")
         .generate()
         .expect("Unable to generate bindings!!")
         .write_to_file("./output/sifir-tor.h");

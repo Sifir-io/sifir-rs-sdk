@@ -37,8 +37,6 @@ pub struct TorServiceParam {
 }
 
 impl TorServiceParam {
-    /// A constructor for TorServiceParam to make it easier to be called from
-    /// an FFI
     pub fn new(data_dir: &str, socks_port: u16) -> TorServiceParam {
         TorServiceParam {
             data_dir: String::from(data_dir),
@@ -53,7 +51,6 @@ pub struct TorService {
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
 }
 
-#[repr(C)]
 pub struct OwnedTorService {
     pub socks_port: u16,
     pub control_port: String,
@@ -72,16 +69,6 @@ pub struct TorHiddenService {
     pub onion_url: TorAddress,
     pub secret_key: [u8; 64],
 }
-
-#[repr(C)]
-pub struct MsgOverTcp {
-    pub target: String,
-    pub msg: String,
-}
-//trait TorSocksProxy {
-//    fn get_socks_port(&self) -> u16;
-//}
-
 /// The Phases of a Boostraping node
 /// From https://github.com/torproject/torspec/blob/master/proposals/137-bootstrap-phases.txt
 #[repr(C)]

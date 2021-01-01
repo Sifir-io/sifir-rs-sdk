@@ -1,12 +1,15 @@
-use libc::{c_char, strlen};
+use libc::{c_char, c_void, strlen};
 use serde::{Deserialize, Serialize};
 use std::ffi::{CStr, CString};
 use std::panic::catch_unwind;
 use std::str;
-use tor::{MsgOverTcp, OwnedTorService, TorServiceParam};
+use tor::{
+    tcp_stream::{DataObserver, TcpSocksStream},
+    OwnedTorService, TorServiceParam,
+};
 
 #[repr(C)]
-enum ResultMessage {
+pub enum ResultMessage {
     Success,
     Error(*mut c_char),
 }
@@ -80,49 +83,124 @@ pub unsafe extern "C" fn get_status_of_owned_TorService(
 }
 #[no_mangle]
 ///# Safety
-/// Get the status of a OwnedTorService
-pub unsafe extern "C" fn msg_over_tcp(
-    owned_client: *mut OwnedTorService,
+/// Start a proxied TcpStream
+pub unsafe extern "C" fn tcp_stream_start(
     target: *const c_char,
+    proxy: *const c_char,
+) -> *mut BoxedResult<TcpSocksStream> {
+    match catch_unwind(|| {
+        assert!(!target.is_null());
+        assert!(!proxy.is_null());
+        let proxy_str: String = unsafe { CStr::from_ptr(proxy) }
+            .to_str()
+            .expect("Could not get str from proxy")
+            .into();
+
+        let target_str: String = unsafe { CStr::from_ptr(target) }
+            .to_str()
+            .expect("Could not get str from target")
+            .into();
+
+        TcpSocksStream::new(target_str, proxy_str)
+    }) {
+        Ok(stream) => Box::into_raw(Box::new(BoxedResult {
+            result: Some(Box::new(stream)),
+            message: ResultMessage::Success,
+        })),
+        Err(e) => {
+            let message = match e.downcast::<String>() {
+                Ok(msg) => *msg,
+                Err(_) => String::from("Unknown panic"),
+            };
+            Box::into_raw(Box::new(BoxedResult {
+                result: None,
+                message: ResultMessage::Error(CString::new(message).unwrap().into_raw()),
+            }))
+        }
+    }
+}
+
+#[repr(C)]
+pub struct Observer {
+    context: *mut c_void,
+    on_success: extern "C" fn(*const c_char, *const c_void),
+    on_err: extern "C" fn(*const c_char, *const c_void),
+}
+
+unsafe impl Send for Observer {}
+
+impl DataObserver for Observer {
+    fn on_data(&self, data: String) {
+        println!("Rust:Ondata {}", data);
+        (self.on_success)(CString::new(data).unwrap().into_raw(), self.context);
+    }
+    fn on_error(&self, data: String) {
+        println!("Rust:onError {}", data);
+        (self.on_err)(CString::new(data).unwrap().into_raw(), self.context);
+    }
+}
+#[no_mangle]
+///# Safety
+/// Send a Message over a tcpStream
+pub unsafe extern "C" fn tcp_stream_on_data(
+    stream: *mut TcpSocksStream,
+    observer: Observer,
+) -> *mut ResultMessage {
+    match catch_unwind(|| {
+        assert!(!stream.is_null());
+        let stream = &mut *stream;
+        stream.on_data(observer)
+    }) {
+        Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
+        Err(e) => {
+            let message = match e.downcast::<String>() {
+                Ok(msg) => *msg,
+                Err(_) => String::from("Unknown panic"),
+            };
+            Box::into_raw(Box::new(ResultMessage::Error(
+                CString::new(message).unwrap().into_raw(),
+            )))
+        }
+    }
+}
+#[no_mangle]
+///# Safety
+/// Send a Message over a tcpStream
+pub unsafe extern "C" fn tcp_stream_send_msg(
+    stream: *mut TcpSocksStream,
     msg: *const c_char,
-    ffi_callback: fn(CString),
-) {
-    assert!(!owned_client.is_null());
-    let owned = &mut *owned_client;
+) -> *mut ResultMessage {
+    match catch_unwind(|| {
+        assert!(!stream.is_null());
+        assert!(!msg.is_null());
+        let stream = &mut *stream;
+        let msg_str: String = unsafe { CStr::from_ptr(msg) }
+            .to_str()
+            .expect("Could not get str from proxy")
+            .into();
+        println!("rust:sendingmsg:{}", msg_str);
+        stream.send_data(msg_str)
+    }) {
+        Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
+        Err(e) => {
+            let message = match e.downcast::<String>() {
+                Ok(msg) => *msg,
+                Err(_) => String::from("Unknown panic"),
+            };
+            Box::into_raw(Box::new(ResultMessage::Error(
+                CString::new(message).unwrap().into_raw(),
+            )))
+        }
+    }
+}
+// FIXME here on_data interface
 
-    let msg_str: String = unsafe { CStr::from_ptr(msg) }
-        .to_str()
-        .expect("Could not get str from msg")
-        .into();
-
-    let target_str: String = unsafe { CStr::from_ptr(target) }
-        .to_str()
-        .expect("Could not get str from target")
-        .into();
-
-    owned
-        .msg_over_tcp(
-            MsgOverTcp {
-                target: target_str,
-                msg: msg_str,
-            },
-            Some(move |reply: String| ffi_callback(CString::new(reply).unwrap())),
-        )
-        .unwrap();
-    // match msg_reply {
-    //     Ok(reply) => {
-    //         let status_string = serde_json::to_string(&reply).unwrap();
-    //         println!("reply is {}", status_string);
-    //         CString::new(status_string).unwrap().into_raw()
-    //     }
-    //     Err(e) => {
-    //         let message = match e.downcast::<String>() {
-    //             Ok(msg) => msg,
-    //             Err(_) => String::from("Unknown error"),
-    //         };
-    //         CString::new(message).unwrap().into_raw()
-    //     }
-    // }
+#[no_mangle]
+///# Safety
+/// Destroy and release TcpSocksStream which will drop the connection
+pub unsafe extern "C" fn tcp_stream_destroy(stream: *mut TcpSocksStream) {
+    assert!(!stream.is_null());
+    let _ = Box::from_raw(stream);
 }
 
 #[no_mangle]
