@@ -55,6 +55,7 @@ impl TcpSocksStream {
     /// Note: if a empty line is read the on_error callback is called with "EOF". It is up to the user to handle this as an error (dead pipe etc..) or an expected EOF, see:
     /// https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
     /// "This reader has reached its "end of file" and will likely no longer be able to produce bytes. Note that this does not mean that the reader will always no longer be able to produce bytes."
+    /// So we break the lsner loop. Caller has to re-setup onData call or start new connection
     pub fn on_data<F>(&self, callback: F) -> anyhow::Result<()>
     where
         F: DataObserver + Send + 'static,
@@ -68,6 +69,7 @@ impl TcpSocksStream {
                     Ok(_) => {
                         if string_buf == "" {
                             callback.on_error(String::from("EOF"));
+                            break;
                         } else {
                             callback.on_data(string_buf)
                         }
