@@ -3,6 +3,7 @@ use socks::Socks5Stream;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::{Read, Write};
+use std::time::Duration;
 use tokio::net::TcpStream;
 
 pub struct TcpSocksStream {
@@ -25,37 +26,66 @@ impl TcpSocksStream {
             stream: socks_stream,
         }
     }
+    /// Spawns a new lsnr on the tcp stream that will call the passed callback with bufsize bytes of
+    /// base64 encoded string of data as it is streamed through the socket
+    /// if 0 bytes are read the reader exits
+    pub fn stream_data<F>(&self, callback: F, buffsize: usize) -> anyhow::Result<()>
+    where
+        F: DataObserver + Send + 'static,
+    {
+        let tcp_stream = self.stream.get_ref();
+        let mut reader = BufReader::new(tcp_stream.try_clone()?);
+        let mut buf = vec![b'x'; buffsize];
+        let _lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(x) => {
+                        if x < 1 {
+                            break;
+                        }
+                        callback.on_data(base64::encode(&buf));
+                    }
+                    Err(e) => callback.on_error(e.to_string()),
+                }
+            }
+        });
+        Ok(())
+    }
     /// Spawns a new lsnr on the tcp stream that will call the passed callback for every new line received
-    /// TODO add different kinds of readers: till end, stream etc..
+    /// Note: if a empty line is read the on_error callback is called with "EOF". It is up to the user to handle this as an error (dead pipe etc..) or an expected EOF, see:
+    /// https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
+    /// "This reader has reached its "end of file" and will likely no longer be able to produce bytes. Note that this does not mean that the reader will always no longer be able to produce bytes."
     pub fn on_data<F>(&self, callback: F) -> anyhow::Result<()>
     where
         F: DataObserver + Send + 'static,
     {
         let tcp_stream = self.stream.get_ref();
         let mut reader = BufReader::new(tcp_stream.try_clone()?);
-        let lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
+        let _lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
             loop {
                 let mut string_buf = String::new();
                 match reader.read_line(&mut string_buf) {
                     Ok(_) => {
-                        if string_buf == ""{
+                        if string_buf == "" {
                             callback.on_error(String::from("EOF"));
-                            break;
                         } else {
                             callback.on_data(string_buf)
                         }
-                    },
-                    Err(e) => {
-                        callback.on_error(e.to_string())
-                    },
+                    }
+                    Err(e) => callback.on_error(e.to_string()),
                 }
             }
         });
         Ok(())
     }
-    pub fn send_data(&mut self, param: String) -> anyhow::Result<()> {
+    /// Sends a string over the TCP connection
+    /// If supplied with an optional Duration timeout to error out of write takes longer than that
+    pub fn send_data(&mut self, data: String, timeout: Option<Duration>) -> anyhow::Result<()> {
         let tcp_stream = self.stream.get_mut();
-        tcp_stream.write_all(param.as_bytes()).unwrap();
+        if timeout.is_some() {
+            tcp_stream.set_write_timeout(timeout)?;
+        }
+        tcp_stream.write_all(data.as_bytes())?;
         Ok(())
     }
 }
@@ -91,9 +121,9 @@ mod tests {
         // setup data lsner
         tcp_com.on_data(Observer {}).unwrap();
 
-        tcp_com.send_data(msg.into()).unwrap();
-        tcp_com.send_data(msg.into()).unwrap();
-        tcp_com.send_data(msg.into()).unwrap();
+        tcp_com.send_data(msg.into(), None).unwrap();
+        tcp_com.send_data(msg.into(), None).unwrap();
+        tcp_com.send_data(msg.into(), None).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(7));
         owned_node.shutdown();
     }

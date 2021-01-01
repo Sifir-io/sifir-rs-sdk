@@ -1,8 +1,7 @@
-use libc::{c_char, c_void, strlen};
-use serde::{Deserialize, Serialize};
+use libc::{c_char, c_void};
 use std::ffi::{CStr, CString};
 use std::panic::catch_unwind;
-use std::str;
+use std::time::Duration;
 use tor::{
     tcp_stream::{DataObserver, TcpSocksStream},
     OwnedTorService, TorServiceParam,
@@ -32,7 +31,7 @@ pub extern "C" fn get_owned_TorService(
             .to_owned();
 
         println!(
-            "Starting TorService with Datadir {} SocksPort {}",
+            "Starting TorService with in data dir {} SocksPort {}",
             dir_str, socks_port
         );
         let param = TorServiceParam {
@@ -123,15 +122,14 @@ pub unsafe extern "C" fn tcp_stream_start(
 #[repr(C)]
 pub struct Observer {
     context: *mut c_void,
-    on_success: extern "C" fn(*const c_char, *const c_void),
-    on_err: extern "C" fn(*const c_char, *const c_void),
+    on_success: extern "C" fn(*mut c_char, *const c_void),
+    on_err: extern "C" fn(*mut c_char, *const c_void),
 }
 
 unsafe impl Send for Observer {}
 
 impl DataObserver for Observer {
     fn on_data(&self, data: String) {
-        println!("Rust:Ondata {}", data);
         (self.on_success)(CString::new(data).unwrap().into_raw(), self.context);
     }
     fn on_error(&self, data: String) {
@@ -169,6 +167,7 @@ pub unsafe extern "C" fn tcp_stream_on_data(
 pub unsafe extern "C" fn tcp_stream_send_msg(
     stream: *mut TcpSocksStream,
     msg: *const c_char,
+    timeout: u64,
 ) -> *mut ResultMessage {
     match catch_unwind(|| {
         assert!(!stream.is_null());
@@ -178,8 +177,7 @@ pub unsafe extern "C" fn tcp_stream_send_msg(
             .to_str()
             .expect("Could not get str from proxy")
             .into();
-        println!("rust:sendingmsg:{}", msg_str);
-        stream.send_data(msg_str)
+        stream.send_data(msg_str, Some(Duration::new(timeout, 0)))
     }) {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
         Err(e) => {
