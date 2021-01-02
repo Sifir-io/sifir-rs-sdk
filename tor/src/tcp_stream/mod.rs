@@ -1,8 +1,10 @@
 use crate::RUNTIME;
+use anyhow::{Result};
 use socks::Socks5Stream;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::{Read, Write};
+use std::net::Shutdown;
 use std::time::Duration;
 use tokio::net::TcpStream;
 
@@ -36,11 +38,11 @@ impl TcpSocksStream {
         let tcp_stream = self.stream.get_ref();
         let mut reader = BufReader::new(tcp_stream.try_clone()?);
         let mut buf = vec![b'x'; buffsize];
-        let _lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
+        let _lsner_handle = (*RUNTIME).lock().unwrap().spawn(async move {
             loop {
                 match reader.read(&mut buf) {
-                    Ok(x) => {
-                        if x < 1 {
+                    Ok(size) => {
+                        if size == 0 {
                             break;
                         }
                         callback.on_data(base64::encode(&buf));
@@ -60,15 +62,17 @@ impl TcpSocksStream {
     where
         F: DataObserver + Send + 'static,
     {
-        let tcp_stream = self.stream.get_ref();
+        let tcp_stream = self.stream.get_ref().try_clone()?;
         let mut reader = BufReader::new(tcp_stream.try_clone()?);
-        let _lsnr_handle = (*RUNTIME).lock().unwrap().spawn(async move {
+        let _lsner_handle = (*RUNTIME).lock().unwrap().spawn(async move {
             loop {
                 let mut string_buf = String::new();
                 match reader.read_line(&mut string_buf) {
-                    Ok(_) => {
-                        if string_buf == "" {
+                    Ok(size) => {
+                        if size == 0 {
                             callback.on_error(String::from("EOF"));
+                            println!("Rust:Tor:TcpStream.ondata: EOF detected for read stream, shutting down streams..");
+                            tcp_stream.shutdown(Shutdown::Both).unwrap();
                             break;
                         } else {
                             callback.on_data(string_buf)
@@ -76,7 +80,7 @@ impl TcpSocksStream {
                     }
                     Err(e) => callback.on_error(e.to_string()),
                 }
-            }
+            };
         });
         Ok(())
     }
@@ -90,16 +94,23 @@ impl TcpSocksStream {
         tcp_stream.write_all(data.as_bytes())?;
         Ok(())
     }
+    pub fn shutdown(&mut self) {
+        self.stream.get_ref().shutdown(Shutdown::Both).unwrap()
+    }
 }
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::{TorService, TorServiceParam};
     use serial_test::serial;
+    use std::cell::RefCell;
+    use std::sync::{Arc, Mutex};
+    use std::borrow::{Borrow, BorrowMut};
+    use std::ops::Deref;
 
     #[test]
     #[serial(tor)]
-    fn tcp_comm() {
+    fn can_send_and_observe_data() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
             data_dir: String::from("/tmp/sifir_rs_sdk/"),
@@ -110,23 +121,36 @@ mod tests {
         let msg = "{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n";
 
         let mut tcp_com = TcpSocksStream::new(target.into(), "127.0.0.1:19054".into());
-        struct Observer {}
+        struct Observer {
+            pub count: Arc<Mutex<u16>>,
+        }
         impl DataObserver for Observer {
             fn on_data(&self, data: String) {
-                println!("Got data {}", data);
+                let mut count = self.count.lock().unwrap();
+                *count += 1;
+                println!("Got data call number {} with {} ",count, data);
                 assert_eq!(data.contains("rpc"), true);
             }
             fn on_error(&self, data: String) {
-                panic!("Got error!: {}", data);
+                if data != "EOF" {
+                    panic!("Got error!: {}", data);
+                }
             }
         }
+        let count = Arc::new(Mutex::new(0));
+        let obv = Observer {
+            count: count.clone()
+        };
         // setup data lsner
-        tcp_com.on_data(Observer {}).unwrap();
+        tcp_com.on_data(obv).unwrap();
 
         tcp_com.send_data(msg.into(), None).unwrap();
         tcp_com.send_data(msg.into(), None).unwrap();
         tcp_com.send_data(msg.into(), None).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(7));
+        tcp_com.shutdown();
+        let call_count:u16 = *count.lock().as_deref().unwrap();
+        assert_eq!(call_count,3);
         owned_node.shutdown();
     }
 }
