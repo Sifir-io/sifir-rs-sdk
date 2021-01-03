@@ -70,7 +70,7 @@ foreign_class!(class TcpSocksStream {
       }).unwrap();
     }
     fn send_data(&mut self, msg:String,timeout:u64){
-        this.send_data(msg, Some(Duration::new(timeout, 0))).unwrap()
+        this.send_data(msg, Some(Duration::new(timeout, 0))).unwrap();
         // this.send_data(msg).unwrap();
     }
 });

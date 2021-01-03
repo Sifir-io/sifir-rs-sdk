@@ -1,5 +1,5 @@
 use crate::RUNTIME;
-use anyhow::{Result};
+use anyhow::Result;
 use socks::Socks5Stream;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -72,7 +72,10 @@ impl TcpSocksStream {
                         if size == 0 {
                             callback.on_error(String::from("EOF"));
                             println!("Rust:Tor:TcpStream.ondata: EOF detected for read stream, shutting down streams..");
-                            tcp_stream.shutdown(Shutdown::Both).unwrap();
+                            // if we error out on shutdown not a biggie, just log it
+                            if let Err(e) = tcp_stream.shutdown(Shutdown::Both) {
+                             callback.on_error(format!("Rust:Tor:TcpStream.onData: EOF Shutdown error: {:?}",e ));
+                            }
                             break;
                         } else {
                             callback.on_data(string_buf)
@@ -103,10 +106,10 @@ mod tests {
     use super::*;
     use crate::{TorService, TorServiceParam};
     use serial_test::serial;
-    use std::cell::RefCell;
-    use std::sync::{Arc, Mutex};
     use std::borrow::{Borrow, BorrowMut};
+    use std::cell::RefCell;
     use std::ops::Deref;
+    use std::sync::{Arc, Mutex};
 
     #[test]
     #[serial(tor)]
@@ -128,7 +131,7 @@ mod tests {
             fn on_data(&self, data: String) {
                 let mut count = self.count.lock().unwrap();
                 *count += 1;
-                println!("Got data call number {} with {} ",count, data);
+                println!("Got data call number {} with {} ", count, data);
                 assert_eq!(data.contains("rpc"), true);
             }
             fn on_error(&self, data: String) {
@@ -139,7 +142,7 @@ mod tests {
         }
         let count = Arc::new(Mutex::new(0));
         let obv = Observer {
-            count: count.clone()
+            count: count.clone(),
         };
         // setup data lsner
         tcp_com.on_data(obv).unwrap();
@@ -149,8 +152,10 @@ mod tests {
         tcp_com.send_data(msg.into(), None).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(7));
         tcp_com.shutdown();
-        let call_count:u16 = *count.lock().as_deref().unwrap();
-        assert_eq!(call_count,3);
+        let call_count: u16 = *count.lock().as_deref().unwrap();
+        assert_eq!(call_count, 3);
+        tcp_com.send_data(msg.into(), None).expect_err("Should error out after connection has been closed");
+        std::thread::sleep(std::time::Duration::from_secs(1));
         owned_node.shutdown();
     }
 }
