@@ -226,13 +226,12 @@ impl OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut _ctl = self._ctl.borrow_mut();
             let ctl = _ctl.as_mut().unwrap();
-            let service_key = {
-                if param.secret_key.is_some() {
-                    param.secret_key.unwrap().into()
-                } else {
-                    TorSecretKeyV3::generate()
-                }
+
+            let service_key = match param.secret_key {
+                Some(key)=> key.into(),
+                _ => TorSecretKeyV3::generate()
             };
+
             ctl.add_onion_v3(
                 &service_key,
                 false,
