@@ -73,8 +73,11 @@ impl TcpSocksStream {
                             callback.on_error(String::from("EOF"));
                             println!("Rust:Tor:TcpStream.ondata: EOF detected for read stream, shutting down streams..");
                             // if we error out on shutdown not a biggie, just log it
-                            if let Err(e) = tcp_stream.shutdown(Shutdown::Both) {
-                             callback.on_error(format!("Rust:Tor:TcpStream.onData: EOF Shutdown error: {:?}",e ));
+                            if let Err(e) = tcp_stream.shutdown(Shutdown::Write) {
+                             callback.on_error(format!("Rust:Tor:TcpStream.onData: EOF Shutdown Write: {:?}",e ));
+                            }
+                            if let Err(e) = tcp_stream.shutdown(Shutdown::Read) {
+                             callback.on_error(format!("Rust:Tor:TcpStream.onData: EOF Shutdown Read: {:?}",e ));
                             }
                             break;
                         } else {
@@ -89,12 +92,12 @@ impl TcpSocksStream {
     }
     /// Sends a string over the TCP connection
     /// If supplied with an optional Duration timeout to error out of write takes longer than that
-    pub fn send_data(&mut self, data: String, timeout: Option<Duration>) -> anyhow::Result<()> {
+    pub fn send_data(&mut self, data: String, timeout: Option<Duration>) -> Result<()> {
         let tcp_stream = self.stream.get_mut();
         if timeout.is_some() {
             tcp_stream.set_write_timeout(timeout)?;
         }
-        tcp_stream.write_all(data.as_bytes())?;
+        tcp_stream.write_all(data.as_bytes()).unwrap();
         Ok(())
     }
     pub fn shutdown(&mut self) {

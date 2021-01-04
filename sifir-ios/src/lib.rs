@@ -133,7 +133,6 @@ impl DataObserver for Observer {
         (self.on_success)(CString::new(data).unwrap().into_raw(), self.context);
     }
     fn on_error(&self, data: String) {
-        println!("Rust:onError {}", data);
         (self.on_err)(CString::new(data).unwrap().into_raw(), self.context);
     }
 }
@@ -147,7 +146,7 @@ pub unsafe extern "C" fn tcp_stream_on_data(
     match catch_unwind(|| {
         assert!(!stream.is_null());
         let stream = &mut *stream;
-        stream.on_data(observer)
+        stream.on_data(observer).unwrap()
     }) {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
         Err(e) => {
@@ -177,7 +176,9 @@ pub unsafe extern "C" fn tcp_stream_send_msg(
             .to_str()
             .expect("Could not get str from proxy")
             .into();
-        stream.send_data(msg_str, Some(Duration::new(timeout, 0)))
+        stream
+            .send_data(msg_str, Some(Duration::new(timeout, 0)))
+            .unwrap()
     }) {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
         Err(e) => {
