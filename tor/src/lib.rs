@@ -1,12 +1,16 @@
+pub mod tcp_stream;
+
 // use crate::utils;
 use anyhow::Result;
 use futures::Future;
 use lazy_static::*;
-use libtor::{Tor, TorAddress, TorFlag};
+use libtor::{LogDestination, Tor, TorAddress, TorBool, TorFlag};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::fs;
+use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
+use std::net::{TcpListener, ToSocketAddrs};
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::thread::JoinHandle;
@@ -14,21 +18,11 @@ use tokio::net::TcpStream;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
 
-/// TODO implement this for hidden service
-pub enum CallBackResult {
-    Success(String),
-    Error(String),
-}
-pub trait CallBack {
-    fn on_state_changed(&self, result: CallBackResult);
-}
-
 type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>>;
 type G = AuthenticatedConn<TcpStream, F>;
 lazy_static! {
-    static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
-        tokio::runtime::Builder::new()
-            .threaded_scheduler()
+    pub static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
+        tokio::runtime::Builder::new_multi_thread()
             .enable_all()
             .build()
             .unwrap()
@@ -43,8 +37,6 @@ pub struct TorServiceParam {
 }
 
 impl TorServiceParam {
-    /// A constructor for TorServiceParam to make it easier to be called from
-    /// an FFI
     pub fn new(data_dir: &str, socks_port: u16) -> TorServiceParam {
         TorServiceParam {
             data_dir: String::from(data_dir),
@@ -59,7 +51,6 @@ pub struct TorService {
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
 }
 
-#[repr(C)]
 pub struct OwnedTorService {
     pub socks_port: u16,
     pub control_port: String,
@@ -71,17 +62,13 @@ pub struct OwnedTorService {
 pub struct TorHiddenServiceParam {
     pub to_port: u16,
     pub hs_port: u16,
+    pub secret_key: Option<[u8; 64]>,
 }
 
 pub struct TorHiddenService {
     pub onion_url: TorAddress,
     pub secret_key: [u8; 64],
 }
-
-//trait TorSocksProxy {
-//    fn get_socks_port(&self) -> u16;
-//}
-
 /// The Phases of a Boostraping node
 /// From https://github.com/torproject/torspec/blob/master/proposals/137-bootstrap-phases.txt
 #[repr(C)]
@@ -125,7 +112,17 @@ impl From<TorServiceParam> for TorService {
                 "{}/ctl.info",
                 param.data_dir
             )))
-            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True));
+            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
+            .flag(TorFlag::TruncateLogFile(TorBool::True));
+        // FIXME bug in flag or permissions ?
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Info,
+        //    libtor::LogDestination::File(format!("{}tor_log.info", param.data_dir)),
+        //))
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Err,
+        //    libtor::LogDestination::File(format!("{}tor_log.err", param.data_dir)),
+        //));
 
         let handle = service.start_background();
 
@@ -191,7 +188,7 @@ impl TorService {
     /// Converts TorService to OwnedTorService, consuming the TorService
     /// and returning an OwnedTorService which is fully bootstrapped and under our control
     /// (If we drop this object the Tor daemon will shut down)
-    pub fn into_owned_node(self, callback: Option<Box<dyn CallBack>>) -> OwnedTorService {
+    pub fn into_owned_node(self) -> OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut ac = self
                 .get_control_auth_conn(Some(Box::new(handler) as F))
@@ -211,7 +208,7 @@ impl TorService {
 impl From<TorServiceParam> for OwnedTorService {
     fn from(param: TorServiceParam) -> Self {
         let t: TorService = param.into();
-        t.into_owned_node(None)
+        t.into_owned_node()
     }
 }
 
@@ -229,7 +226,12 @@ impl OwnedTorService {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut _ctl = self._ctl.borrow_mut();
             let ctl = _ctl.as_mut().unwrap();
-            let service_key = TorSecretKeyV3::generate();
+
+            let service_key = match param.secret_key {
+                Some(key)=> key.into(),
+                _ => TorSecretKeyV3::generate()
+            };
+
             ctl.add_onion_v3(
                 &service_key,
                 false,
@@ -275,7 +277,6 @@ impl OwnedTorService {
         let _ = self._handle.take().unwrap().join();
     }
 }
-
 /// High level API for Torut used internally by TorService to expose
 /// note control functions to FFI and user
 impl<F, H> TorControlApi for AuthenticatedConn<TcpStream, H>
@@ -317,27 +318,29 @@ where
 mod tests {
     use super::*;
     use serial_test::serial;
-    use std::io::Write;
-    use std::net::TcpListener;
+    use socks::{Socks5Datagram, ToTargetAddr};
+    use std::borrow::Borrow;
+    use std::io::{Read, Write};
+    use std::net::{TcpListener, ToSocketAddrs};
 
-    #[tokio::test]
-    #[serial(tor)]
-    async fn get_from_param_and_await_boostrap_using_TorControlApi() {
-        let service: TorService = TorServiceParam {
-            socks_port: Some(19051),
-            data_dir: String::from("/tmp/torlib2"),
-        }
-        .into();
-        assert_eq!(service.socks_port, 19051);
-        assert_eq!(service.control_port.contains("127.0.0.1:"), true);
-        assert_eq!(service._handle.is_some(), true);
-        let mut control_conn = service.get_control_auth_conn(Some(handler)).await;
-        let bootsraped = control_conn.wait_bootstrap().await.unwrap();
-        assert_eq!(bootsraped, true);
-        control_conn.take_ownership().await.unwrap();
-        control_conn.shutdown();
-        let _ = service._handle.unwrap().join();
-    }
+    //#[tokio::test]
+    //#[serial(tor)]
+    //async fn get_from_param_and_await_boostrap_using_TorControlApi() {
+    //    let service: TorService = TorServiceParam {
+    //        socks_port: Some(19051),
+    //        data_dir: String::from("/tmp/torlib2"),
+    //    }
+    //    .into();
+    //    assert_eq!(service.socks_port, 19051);
+    //    assert_eq!(service.control_port.contains("127.0.0.1:"), true);
+    //    assert_eq!(service._handle.is_some(), true);
+    //    let mut control_conn = service.get_control_auth_conn(Some(hand//ler)).await;
+    //    let bootsraped = control_conn.wait_bootstrap().await.unwrap();
+    //    assert_eq!(bootsraped, true);
+    //    control_conn.take_ownership().await.unwrap();
+    //    control_conn.shutdown();
+    //    let _ = service._handle.unwrap().join();
+    //}
 
     #[test]
     #[serial(tor)]
@@ -349,7 +352,7 @@ mod tests {
         .into();
         let client = utils::get_proxied_client(service.socks_port).unwrap();
 
-        let mut owned_node = service.into_owned_node(None);
+        let mut owned_node = service.into_owned_node();
         (*RUNTIME).lock().unwrap().block_on(async {
             let resp = client
                 .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
@@ -370,7 +373,7 @@ mod tests {
             data_dir: String::from("/tmp/sifir_rs_sdk/"),
         }
         .into();
-        let mut owned_node = service.into_owned_node(None);
+        let mut owned_node = service.into_owned_node();
         let status = owned_node.get_status().unwrap();
         assert!(matches!(status, OwnedTorServiceBootstrapPhase::Done));
         owned_node.shutdown();
@@ -384,11 +387,12 @@ mod tests {
         }
         .into();
         let client = utils::get_proxied_client(service.socks_port).unwrap();
-        let mut owned_node = service.into_owned_node(None);
+        let mut owned_node = service.into_owned_node();
         let service_key = owned_node
             .create_hidden_service(TorHiddenServiceParam {
                 to_port: 20000,
                 hs_port: 20011,
+                secret_key: None,
             })
             .unwrap();
         assert!(service_key.onion_url.to_string().contains(".onion"));
