@@ -1,17 +1,17 @@
 use bdk::bitcoin::util::bip32::{
     ChildNumber, Error as Bip32Error, ExtendedPrivKey, ExtendedPubKey,
 };
-use bdk::bitcoin::{secp256k1, Network, PrivateKey};
+pub use bdk::bitcoin::{secp256k1, Network, PrivateKey};
 use bdk::blockchain::ElectrumBlockchain;
 use bdk::database::MemoryDatabase;
 use bdk::descriptor;
 use bdk::descriptor::ToWalletDescriptor;
 use bdk::electrum_client::Client;
+use bdk::keys::{GeneratableKey, GeneratedKey};
 use bdk::Wallet;
-use bdk::keys::{GeneratedKey,GeneratableKey};
+use bip39::{Language, Mnemonic, MnemonicType, Seed};
 use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
-use bip39::{Mnemonic, MnemonicType, Language, Seed};
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletDescriptors {
@@ -174,7 +174,10 @@ mod tests {
         /// create a new randomly generated mnemonic phrase
         let mnemonic = match Mnemonic::new(mnemonic_type, Language::English, "") {
             Ok(b) => b,
-            Err(e) => { println!("e: {}", e); return }
+            Err(e) => {
+                println!("e: {}", e);
+                return;
+            }
         };
 
         /// get the phrase as a string
@@ -182,13 +185,12 @@ mod tests {
         println!("phrase: {}", phrase);
         /// get the HD wallet seed
         let seed = mnemonic.get_seed();
-// get the HD wallet seed as raw bytes
+        // get the HD wallet seed as raw bytes
         let seed_bytes: &[u8] = seed.as_ref();
-// get the HD wallet seed as a hex string
+        // get the HD wallet seed as a hex string
         let seed_hex: &str = seed.as_hex();
-// get an owned Seed instance
+        // get an owned Seed instance
         let owned_seed: Seed = seed.to_owned();
-
         let mnemonic = Mnemonic::from_phrase(mnemonic, Language::English).unwrap();
         let path = bdk::DerivationPath::from_str("m/44'/0'/0'/0").unwrap();
         let key = (mnemonic, path);

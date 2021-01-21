@@ -9,12 +9,17 @@ echo "Will build a universal IOS dylib !!";
 echo "---------------";
 echo "---------------";
 
-if [[ "$1" == "release" ]]; then
-	target=$1;
-	echo "### Building Release ###"
-fi
+# Always build release now since ssl throws error on anything else now
+target="release";
+#if [[ "$1" == "release" ]]; then
+#	target=$1;
+#	echo "### Building Release ###"
+#fi
 
-export IPHONEOS_DEPLOYMENT_TARGET="11.1"
+# Build local (+ FFI)
+cargo  build -p sifir-ios --"$target";
+
+export IPHONEOS_DEPLOYMENT_TARGET="11.0"
 
 #cargo +nightly build -p sifir-ios --target x86_64-apple-ios --"$target";
 #cargo +nightly build -p sifir-ios --target aarch64-apple-ios --"$target";
@@ -22,9 +27,8 @@ cargo  build -p sifir-ios --target x86_64-apple-ios --"$target";
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 cargo  build -p sifir-ios --target aarch64-apple-ios --"$target";
+retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
-
-[ -z $target ] && target="debug";
 
 mkdir -p ../output/"$target"/{universal,aarch64-apple-ios,x86_64-apple-ios};
 
