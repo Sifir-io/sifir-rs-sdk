@@ -189,9 +189,9 @@ mod tests {
         tcp_com.shutdown();
         let call_count: u16 = *count.lock().as_deref().unwrap();
         assert_eq!(call_count, 3);
-       // tcp_com
-       //     .send_data(msg.into(), None)
-       //     .expect_err("Should error out after connection has been closed");
+        tcp_com
+            .send_data(msg.into(), None)
+            .expect_err("Should error out after connection has been closed");
         std::thread::sleep(std::time::Duration::from_secs(1));
         owned_node.shutdown();
     }
