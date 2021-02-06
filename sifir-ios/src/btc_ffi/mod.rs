@@ -18,7 +18,8 @@ pub extern "C" fn generate_descriptor(
             "testnet" => Ok(Network::Testnet),
             "mainnet" => Ok(Network::Bitcoin),
             _ => Err("Invalid network passed"),
-        }.unwrap();
+        }
+        .unwrap();
         generate_wallet_descriptors(network).unwrap()
     }) {
         Ok(descriptor) => Box::into_raw(Box::new(BoxedResult {

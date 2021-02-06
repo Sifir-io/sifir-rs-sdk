@@ -63,7 +63,7 @@ impl DataObserver for Observer {
 /// TcpStream Android Interface
 foreign_class!(class TcpSocksStream {
     self_type TcpSocksStream;
-    constructor TcpSocksStream::new(target:String,socks_proxy:String)->TcpSocksStream;
+    constructor TcpSocksStream::new_timeout(target:String,socks_proxy:String,timeout_ms:u64)->TcpSocksStream;
     fn on_data(&self,cb:Box<dyn DataObserver>){
       this.on_data(Observer{
        cb,

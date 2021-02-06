@@ -86,6 +86,7 @@ pub unsafe extern "C" fn get_status_of_owned_TorService(
 pub unsafe extern "C" fn tcp_stream_start(
     target: *const c_char,
     proxy: *const c_char,
+    timeout_ms: u64,
 ) -> *mut BoxedResult<TcpSocksStream> {
     match catch_unwind(|| {
         assert!(!target.is_null());
@@ -100,7 +101,7 @@ pub unsafe extern "C" fn tcp_stream_start(
             .expect("Could not get str from target")
             .into();
 
-        TcpSocksStream::new(target_str, proxy_str)
+        TcpSocksStream::new_timeout(target_str, proxy_str,timeout_ms)
     }) {
         Ok(stream) => Box::into_raw(Box::new(BoxedResult {
             result: Some(Box::new(stream)),
