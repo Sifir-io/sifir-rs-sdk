@@ -5,8 +5,8 @@ use std::io::BufRead;
 use std::io::BufReader;
 use std::io::{Read, Write};
 use std::net::Shutdown;
-use std::time::Duration;
 use tokio::net::TcpStream;
+use tokio::time::{timeout, Duration};
 
 pub struct TcpSocksStream {
     target: String,
@@ -27,6 +27,22 @@ impl TcpSocksStream {
             socks_proxy,
             stream: socks_stream,
         }
+    }
+
+    /// New (connect) but with a timeout
+    /// Blocks till connection established or timeout (in MS) expires
+    pub fn new_timeout(target: String, socks_proxy: String, timeout_ms: u64) -> Self {
+        let socks_future = (*RUNTIME)
+            .lock()
+            .unwrap()
+            .spawn(async move { TcpSocksStream::new(target, socks_proxy) });
+
+        (*RUNTIME).lock().unwrap().block_on(async move {
+            timeout(Duration::from_millis(timeout_ms), socks_future)
+                .await
+                .unwrap()
+                .unwrap()
+        })
     }
     /// Spawns a new lsnr on the tcp stream that will call the passed callback with bufsize bytes of
     /// base64 encoded string of data as it is streamed through the socket
@@ -113,6 +129,22 @@ mod tests {
     use std::cell::RefCell;
     use std::ops::Deref;
     use std::sync::{Arc, Mutex};
+
+    #[test]
+    #[serial(tor)]
+    #[should_panic]
+    fn connects_with_timeout() {
+        let service: TorService = TorServiceParam {
+            socks_port: Some(19054),
+            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+        }
+        .into();
+        let mut _owned_node = service.into_owned_node();
+        let target = "udfpzbte2hommnvag5f3qlouqkhvp3xybhlus2yvfeqdwlhjroe4bbyd.onion:60001";
+        // Connecting over Tor takes much longer than 20ms so this should panic
+        // TODO improve this test
+        TcpSocksStream::new_timeout(target.into(), "127.0.0.1:19054".into(), 20);
+    }
 
     #[test]
     #[serial(tor)]
