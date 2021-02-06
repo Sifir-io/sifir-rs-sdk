@@ -4,6 +4,7 @@
 
 members =[
     "tor",
+    "btc",
     "utils",
     "sifir-android",
     "sifir-ios"

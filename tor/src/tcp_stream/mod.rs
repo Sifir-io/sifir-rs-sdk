@@ -1,12 +1,13 @@
 use crate::RUNTIME;
 use anyhow::Result;
 use socks::Socks5Stream;
+use std::convert::TryInto;
 use std::io::BufRead;
 use std::io::BufReader;
 use std::io::{Read, Write};
 use std::net::Shutdown;
-use std::time::Duration;
 use tokio::net::TcpStream;
+use tokio::time::{timeout, Duration};
 
 pub struct TcpSocksStream {
     target: String,
@@ -20,6 +21,7 @@ pub trait DataObserver {
 }
 
 impl TcpSocksStream {
+    /// Blocks indefinitely until connection established
     pub fn new(target: String, socks_proxy: String) -> Self {
         let socks_stream = Socks5Stream::connect(socks_proxy.as_str(), target.as_str()).unwrap();
         TcpSocksStream {
@@ -27,6 +29,21 @@ impl TcpSocksStream {
             socks_proxy,
             stream: socks_stream,
         }
+    }
+    /// New (connect) but with a timeout
+    /// Blocks till connection established or timeout (in MS) expires
+    pub fn new_timeout(target: String, socks_proxy: String, timeout_ms: u64) -> Self {
+        let socks_future = (*RUNTIME)
+            .lock()
+            .unwrap()
+            .spawn(async move { TcpSocksStream::new(target, socks_proxy) });
+
+        (*RUNTIME).lock().unwrap().block_on(async move {
+            timeout(Duration::from_millis(timeout_ms), socks_future)
+                .await
+                .unwrap()
+                .unwrap()
+        })
     }
     /// Spawns a new lsnr on the tcp stream that will call the passed callback with bufsize bytes of
     /// base64 encoded string of data as it is streamed through the socket
@@ -116,6 +133,22 @@ mod tests {
 
     #[test]
     #[serial(tor)]
+    #[should_panic]
+    fn connects_with_timeout() {
+        let service: TorService = TorServiceParam {
+            socks_port: Some(19054),
+            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+        }
+        .into();
+        let mut owned_node = service.into_owned_node();
+        let target = "udfpzbte2hommnvag5f3qlouqkhvp3xybhlus2yvfeqdwlhjroe4bbyd.onion:60001";
+        // Connecting over Tor takes much longer than 20ms so this should panic
+        // TODO improve this test
+        TcpSocksStream::new_timeout(target.into(), "127.0.0.1:19054".into(), 20);
+    }
+
+    #[test]
+    #[serial(tor)]
     fn can_send_and_observe_data() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
@@ -157,7 +190,9 @@ mod tests {
         tcp_com.shutdown();
         let call_count: u16 = *count.lock().as_deref().unwrap();
         assert_eq!(call_count, 3);
-        tcp_com.send_data(msg.into(), None).expect_err("Should error out after connection has been closed");
+        tcp_com
+            .send_data(msg.into(), None)
+            .expect_err("Should error out after connection has been closed");
         std::thread::sleep(std::time::Duration::from_secs(1));
         owned_node.shutdown();
     }

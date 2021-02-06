@@ -228,8 +228,8 @@ impl OwnedTorService {
             let ctl = _ctl.as_mut().unwrap();
 
             let service_key = match param.secret_key {
-                Some(key)=> key.into(),
-                _ => TorSecretKeyV3::generate()
+                Some(key) => key.into(),
+                _ => TorSecretKeyV3::generate(),
             };
 
             ctl.add_onion_v3(
