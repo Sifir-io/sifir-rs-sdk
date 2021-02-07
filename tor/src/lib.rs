@@ -262,7 +262,6 @@ impl OwnedTorService {
     /// OwnedTorServiceBootstrapPhase will either be Done or Other(String) containing the stage of
     /// the boostrap the node is a
     pub fn get_status(&self) -> Result<OwnedTorServiceBootstrapPhase> {
-        // FIXME POISON error ?
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut ctl = self._ctl.borrow_mut();
             Ok(ctl.as_mut().unwrap().get_status().await.unwrap())

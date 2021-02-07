@@ -7,7 +7,7 @@ DIR="$BASE/src/main";
 
 # tuple (rust target,android target)
 
-targets=("i686-linux-android" "x86"  "armv7-linux-androideabi" "armeabi-v7a" "aarch64-linux-android" "arm64-v8a" "x86_64-linux-android" "x86_64");
+targets=("i686-linux-android" "x86"  "armv7-linux-androideabi" "armeabi-v7a" "aarch64-linux-android" "arm64"  "aarch64-linux-android" "arm64-v8a" "x86_64-linux-android" "x86_64");
 test_targets=("x86_64-unknown-linux-gnu" "x86_64");
 libfile="libsifir_android.so";
 
