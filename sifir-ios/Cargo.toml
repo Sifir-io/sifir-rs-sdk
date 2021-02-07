@@ -13,8 +13,11 @@ serde = { version="1.0.117", features = ["derive"]}
 serde_json = "1.0"
 
 [build-dependencies]
-cbindgen = "0.15.0"
+cbindgen = "0.17.0"
 cargo-lipo = "3.1.1"
 
 [lib]
-crate-type = ["staticlib","cdylib"]
+# TODO can't build dylibs anymore ?
+# error: cannot produce dylib for `sifir-ios v0.1.0 (/Users/ghassanabidi/Projects/sifir-rs-sdk/sifir-ios)` as the target `aarch64-apple-ios` does not support these crate types
+crate-type = ["staticlib"]
+# crate-type = ["staticlib","cdylib"]
