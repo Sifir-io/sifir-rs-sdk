@@ -101,7 +101,7 @@ pub unsafe extern "C" fn tcp_stream_start(
             .expect("Could not get str from target")
             .into();
 
-        TcpSocksStream::new_timeout(target_str, proxy_str, timeout_ms)
+        TcpSocksStream::new_timeout(target_str, proxy_str, timeout_ms).unwrap()
     }) {
         Ok(stream) => Box::into_raw(Box::new(BoxedResult {
             result: Some(Box::new(stream)),

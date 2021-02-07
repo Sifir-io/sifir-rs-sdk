@@ -1,5 +1,5 @@
 use crate::RUNTIME;
-use anyhow::Result;
+use anyhow::{Error, Result};
 use socks::Socks5Stream;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -31,18 +31,24 @@ impl TcpSocksStream {
     }
     /// New (connect) but with a timeout
     /// Blocks till connection established or timeout (in MS) expires
-    pub fn new_timeout(target: String, socks_proxy: String, timeout_ms: u64) -> Self {
+    pub fn new_timeout(target: String, socks_proxy: String, timeout_ms: u64) -> Result<Self> {
         let socks_future = (*RUNTIME)
             .lock()
             .unwrap()
             .spawn(async move { TcpSocksStream::new(target, socks_proxy) });
 
-        (*RUNTIME).lock().unwrap().block_on(async move {
-            timeout(Duration::from_millis(timeout_ms), socks_future)
-                .await
-                .unwrap()
-                .unwrap()
-        })
+        let connection_result = (*RUNTIME).lock().unwrap().block_on(async move {
+            timeout(Duration::from_millis(timeout_ms), socks_future).await
+        });
+        // Downcast Elapsed Result with TokioJoinError (timeout) to simple return
+        // TODO rust idomatic way of doing this ?
+        match connection_result {
+            Err(e) => Err(e.into()),
+            Ok(elapsed_result) => match elapsed_result {
+                Err(e) => Err(e.into()),
+                Ok(stream) => Ok(stream),
+            },
+        }
     }
     /// Spawns a new lsnr on the tcp stream that will call the passed callback with bufsize bytes of
     /// base64 encoded string of data as it is streamed through the socket
@@ -132,7 +138,6 @@ mod tests {
 
     #[test]
     #[serial(tor)]
-    #[should_panic]
     fn connects_with_timeout() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
@@ -143,7 +148,9 @@ mod tests {
         let target = "udfpzbte2hommnvag5f3qlouqkhvp3xybhlus2yvfeqdwlhjroe4bbyd.onion:60001";
         // Connecting over Tor takes much longer than 20ms so this should panic
         // TODO improve this test
-        TcpSocksStream::new_timeout(target.into(), "127.0.0.1:19054".into(), 20);
+        let connection_result =
+            TcpSocksStream::new_timeout(target.into(), "127.0.0.1:19054".into(), 20);
+        assert_eq!(connection_result.is_err(), true);
     }
 
     #[test]
