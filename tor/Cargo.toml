@@ -8,7 +8,7 @@ edition = "2018"
 
 [dependencies]
 tokio = { version= "0.3", features = ["net","rt","process","rt-multi-thread","time"] }
-libtor = {version= "44.5.2+0.4.4.5", features=["vendored-openssl"]}
+libtor = {version= "44.6.1+0.4.4.6", features=["vendored-openssl"]}
 torut = { version = "0.1.7", features=["control","v3","vendored_openssl"] }
 #torut = { version = "0.1.6" , features=["vendored_openssl"] }
 anyhow = "1.0.33"

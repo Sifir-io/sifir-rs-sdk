@@ -23,14 +23,12 @@ mkdir -p "$working_dir/Modules";
 \cp -f "../output/sifir_typedef.h" "$working_dir/Headers/sifir_typedef.h"
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
-# FIXME THIS
-#sed -r -i 's/[^\w](OwnedTorService)\s+/\1_t/g' "$working_dir/Headers/$framework_name.h"
-lipo -create "../output/$target/universal/libsifir_ios.dylib" -output "$working_dir/$framework_name"
+lipo -create "../output/$target/universal/libsifir_ios.a" -output "$working_dir/$framework_name"
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
-install_name_tool -id "@rpath/$framework_name.framework/$framework_name" "$working_dir/$framework_name"
-retVal=$?
-[ ! $retVal -eq 0 ] && exit 1;
+#install_name_tool -id "@rpath/$framework_name.framework/$framework_name" "$working_dir/$framework_name"
+#retVal=$?
+#[ ! $retVal -eq 0 ] && exit 1;
 
 cat <<HERE > "$working_dir/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>

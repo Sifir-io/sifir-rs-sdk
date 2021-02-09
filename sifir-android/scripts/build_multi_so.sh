@@ -14,16 +14,16 @@ retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 fi
 
-cargo ndk --android-platform 30 --target x86_64-linux-android -- build -p sifir-android --release
+cargo ndk --platform 30 --target x86_64-linux-android build --release
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
-cargo ndk --android-platform 30 --target aarch64-linux-android -- build -p sifir-android --release
+cargo ndk --platform 30 --target aarch64-linux-android build -p sifir-android --release
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
-cargo ndk --android-platform 30 --target armv7-linux-androideabi -- build -p sifir-android --release
+cargo ndk --platform 30 --target armv7-linux-androideabi build -p sifir-android --release
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
-cargo ndk --android-platform 30 --target i686-linux-android -- build -p sifir-android --release
+cargo ndk --platform 30 --target i686-linux-android build -p sifir-android --release
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 
