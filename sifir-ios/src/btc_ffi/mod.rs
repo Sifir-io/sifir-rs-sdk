@@ -1,5 +1,5 @@
 use crate::tor_ffi::{BoxedResult, ResultMessage};
-use btc::{generate_wallet_descriptors, Network, WalletCfg, WalletDescriptors};
+use btc::{generate_pkh_descriptors, Network, WalletCfg, WalletDescriptors};
 use libc::{c_char, c_void};
 use std::ffi::{CStr, CString};
 use std::panic::catch_unwind;
@@ -20,7 +20,7 @@ pub extern "C" fn generate_descriptor(
             _ => Err("Invalid network passed"),
         }
         .unwrap();
-        generate_wallet_descriptors(network).unwrap()
+        generate_pkh_descriptors(network).unwrap()
     }) {
         Ok(descriptor) => Box::into_raw(Box::new(BoxedResult {
             result: Some(Box::new(descriptor)),
