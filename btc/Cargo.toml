@@ -10,4 +10,5 @@ edition = "2018"
 bdk = { git = "https://github.com/bitcoindevkit/bdk.git" , features = ['all-keys']}
 rand = "0.8.0"
 serde = "1.0.118"
+serde_json = "1.0"
 anyhow = "1.0"
