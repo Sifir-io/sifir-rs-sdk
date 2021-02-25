@@ -73,12 +73,26 @@ impl From<WalletCfg> for ElectrumMemoryWallet {
 #[derive(Debug)]
 pub struct DerivedBip39Xprvs {
     phrase: String,
+    master_fingerprint: String,
     xprv_w_paths: Vec<(ExtendedPrivKey, DerivationPath)>,
 }
 ///
 /// Generate a new Bip39 mnemonic seed
 /// Derive num_child from provided derive_base
 ///
+/// FIXME
+/// refactor this to
+/// let mnemonic = Mnemonic::from_phrase(...)?;
+/// let base_path = DerivationPath::from_str("m/0'");
+/// let descriptors = (0..1)
+///   .map(|index| ChildNumber::Normal { index }) // transform the index into a `ChildNumber`
+///   .map(|child| base_path.extend(&[child]))    // create the full path (base path + this child)
+///   .map(|full_path| bdk::descriptor!(wpkh((menmonic.clone(), full_path)))); // create a wpkh descriptor with the mnemonic and the full path
+///
+/// let (external_desc, ext_keymap, valid_network) = descriptors.next().unwrap()?;
+/// let (internal_desc, int_keymap, _) = descriptors.next().unwrap()?;
+/// SEE NOTES
+/// TODO - Maybe i just need to use the correct key fingerprint ? Ie the root ?
 impl DerivedBip39Xprvs {
     pub fn new(
         derive_base: DerivationPath,
@@ -120,7 +134,9 @@ impl DerivedBip39Xprvs {
             .take(num_child)
             .collect::<Vec<(ExtendedPrivKey, DerivationPath)>>();
 
+        // FIXME here do we send back masterfingerprint or make it part of tuple ?
         Ok(DerivedBip39Xprvs {
+            master_fingerprint: format!("{:x?}", xprv_master.fingerprint(&secp)),
             phrase: mnemonic_gen.into_phrase(),
             xprv_w_paths,
         })
@@ -302,11 +318,12 @@ mod tests {
             "aim bunker wash balance finish force paper analyst cabin spoon stable organ";
         let num_child = 2;
         // segwit/coin/account
-        let derive_base = "m/0'";
+        let derive_base = "m/44'/0'/0'";
         let network = Network::Bitcoin;
 
         let mnemonic = Mnemonic::from_phrase(test_mnemonic, Language::English).unwrap();
         let key: ExtendedKey<miniscript::BareCtx> = mnemonic.into_extended_key().unwrap();
+
         // master m
         let xprv_master = key.into_xprv(network).unwrap();
         assert_eq!(xprv_master.depth, 0);
@@ -316,10 +333,10 @@ mod tests {
         assert_eq!(derive_path.to_string(), derive_base);
 
         let wallet_root_key = xprv_master.derive_priv(&secp, &derive_path).unwrap();
-        assert_eq!(wallet_root_key.depth, 1);
+        assert_eq!(wallet_root_key.depth, 3);
 
         // from https://iancoleman.io/bip39/
-        let expected_xprvs = ["xprv9wvPSwhTzAefWQkC6da4xVZm2mJ267e31tbgsa7hbzY31wS9fQJGbDzNuN3dBAL1fPDvwwZJj1A2a48Gt3DBKaa463axRgPURN5Jgykf78W","xprv9wvPSwhTzAefXwZHxdEMEmgQoghA6GZR1ur1EigGRJtzRGu4C5Lz7qX6tEvg9ajNgthNyeixs3mKKVc9rNgTYJzqEiQ28rNkctpX5QTncw5"];
+        let expected_xprvs = ["xprvA1Rm2Dm6Zgjc6yLcH1vyS1VuykpPMKCQmymmYFv9kSvpfZ51y8G6wzaZVC6BtphuiDKEXcsENy3RbwLa3Nqwb9VBQvQagEG6J5EK76aTjmh","xprvA1Rm2Dm6Zgjc8zwffxi6Bb9dX5V14mvLRPVo72J3Q8C5BHRyACD7Ywk2L7ovf5fo8WcBQ7Janoba9fQXjXuY5wQaRfzj5ahZkPBZY449suQ"];
 
         // derive n childs int/ext m/0'/n'
         derive_path
@@ -336,9 +353,9 @@ mod tests {
             .into_iter()
             .enumerate()
             .for_each(|(i, (key, path))| {
-                assert_eq!(format!("{}", path), format!("m/0'/{}", i));
+                assert_eq!(format!("{}", path), format!("m/44'/0'/0'/{}", i));
                 assert_eq!(key.to_string(), expected_xprvs[i]);
-                assert_eq!(key.depth, 2);
+                assert_eq!(key.depth, 4);
                 assert_eq!(key.parent_fingerprint, wallet_root_key.fingerprint(&secp));
             });
     }
@@ -400,9 +417,7 @@ mod tests {
         sync_result.unwrap();
 
         let balance = sender_wallet.get_balance().unwrap();
-        println!("Sender wallet balance {}", balance);
         assert!(balance > 100);
-
         let mut txn = sender_wallet.build_tx();
         txn.add_recipient(rcvr_wallet.get_new_address().unwrap().script_pubkey(), 1000)
             .fee_rate(FeeRate::from_sat_per_vb(5.0))
@@ -412,8 +427,6 @@ mod tests {
         let (psbt, tx_details) = txn.finish().unwrap();
         let (psbt_signed, finished) = sender_wallet.sign(psbt, None).unwrap();
         assert!(finished);
-        println!("signed {:#?}", psbt_signed);
         let txn_id = sender_wallet.broadcast(psbt_signed.extract_tx()).unwrap();
-
     }
 }
