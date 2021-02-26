@@ -1105,9 +1105,9 @@ checksum = "89203f3fba0a3795506acaad8ebce3c80c0af93f994d5a1d7a0b1eeb23271929"
 
 [[package]]
 name = "libtor"
-version = "44.6.1+0.4.4.6"
+version = "44.7.0+0.4.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a888202ade82ca38b732169f4abb61df41971ba938b02bf4dd81f530bdd09863"
+checksum = "3c66f20f68896b4ae3abe6e29f9855111ecd44a89747eb88cd010a7de16a447f"
 dependencies = [
  "libtor-derive",
  "libtor-sys",
@@ -1127,9 +1127,9 @@ dependencies = [
 
 [[package]]
 name = "libtor-sys"
-version = "44.6.0+0.4.4.6"
+version = "44.7.0+0.4.4.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4605ea4ab35335074e507bebfa7268ce4f5c42dfc6ee77c9075a954c2c5b7124"
+checksum = "382360648f3c3576b0ea3bc9728315d131b3421d420d56f2fbc87aac2f1fb7e1"
 dependencies = [
  "autotools",
  "cc",
