@@ -1,5 +1,5 @@
+use crate::TorErrors;
 use crate::RUNTIME;
-use anyhow::{Error, Result};
 use socks::Socks5Stream;
 use std::io::BufRead;
 use std::io::BufReader;
@@ -31,29 +31,27 @@ impl TcpSocksStream {
     }
     /// New (connect) but with a timeout
     /// Blocks till connection established or timeout (in MS) expires
-    pub fn new_timeout(target: String, socks_proxy: String, timeout_ms: u64) -> Result<Self> {
+    pub fn new_timeout(
+        target: String,
+        socks_proxy: String,
+        timeout_ms: u64,
+    ) -> Result<Self, TorErrors> {
         let socks_future = (*RUNTIME)
             .lock()
             .unwrap()
             .spawn(async move { TcpSocksStream::new(target, socks_proxy) });
 
-        let connection_result = (*RUNTIME).lock().unwrap().block_on(async move {
-            timeout(Duration::from_millis(timeout_ms), socks_future).await
-        });
-        // Downcast Elapsed Result with TokioJoinError (timeout) to simple return
-        // TODO rust idomatic way of doing this ?
-        match connection_result {
-            Err(e) => Err(e.into()),
-            Ok(elapsed_result) => match elapsed_result {
-                Err(e) => Err(e.into()),
-                Ok(stream) => Ok(stream),
-            },
-        }
+        (*RUNTIME)
+            .lock()
+            .unwrap()
+            .block_on(async move { timeout(Duration::from_millis(timeout_ms), socks_future).await })
+            .map_err(|e| TorErrors::BootStrapError(String::from("Tcp connection timedout")))?
+            .map_err(TorErrors::ThreadingError)
     }
     /// Spawns a new lsnr on the tcp stream that will call the passed callback with bufsize bytes of
     /// base64 encoded string of data as it is streamed through the socket
     /// if 0 bytes are read the reader exits
-    pub fn stream_data<F>(&self, callback: F, buffsize: usize) -> anyhow::Result<()>
+    pub fn stream_data<F>(&self, callback: F, buffsize: usize) -> Result<(), TorErrors>
     where
         F: DataObserver + Send + 'static,
     {
@@ -80,7 +78,7 @@ impl TcpSocksStream {
     /// https://doc.rust-lang.org/std/io/trait.Read.html#tymethod.read
     /// "This reader has reached its "end of file" and will likely no longer be able to produce bytes. Note that this does not mean that the reader will always no longer be able to produce bytes."
     /// So we break the lsner loop. Caller has to re-setup onData call or start new connection
-    pub fn on_data<F>(&self, callback: F) -> anyhow::Result<()>
+    pub fn on_data<F>(&self, callback: F) -> Result<(), TorErrors>
     where
         F: DataObserver + Send + 'static,
     {
@@ -114,16 +112,17 @@ impl TcpSocksStream {
     }
     /// Sends a string over the TCP connection
     /// If supplied with an optional Duration timeout to error out of write takes longer than that
-    pub fn send_data(&mut self, data: String, timeout: Option<Duration>) -> Result<()> {
+    pub fn send_data(&mut self, data: String, timeout: Option<Duration>) -> Result<(), TorErrors> {
         let tcp_stream = self.stream.get_mut();
         if timeout.is_some() {
             tcp_stream.set_write_timeout(timeout)?;
         }
-        tcp_stream.write_all(data.as_bytes()).unwrap();
+        tcp_stream.write_all(data.as_bytes())?;
         Ok(())
     }
-    pub fn shutdown(&mut self) {
-        self.stream.get_ref().shutdown(Shutdown::Both).unwrap()
+    pub fn shutdown(&mut self) -> Result<(), TorErrors> {
+        self.stream.get_ref().shutdown(Shutdown::Both)?;
+        Ok(())
     }
 }
 #[cfg(test)]
@@ -203,6 +202,6 @@ mod tests {
             .send_data(msg.into(), None)
             .expect_err("Should error out after connection has been closed");
         std::thread::sleep(std::time::Duration::from_secs(1));
-        owned_node.shutdown();
+        owned_node.shutdown().unwrap();
     }
 }

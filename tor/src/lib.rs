@@ -19,6 +19,7 @@ use std::sync::Mutex;
 use std::thread::JoinHandle;
 use thiserror::Error;
 use tokio::net::TcpStream;
+use tokio::task::JoinError;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
 
@@ -110,6 +111,8 @@ pub enum TorErrors {
     BootStrapError(String),
     #[error("Error Bootstraping:")]
     IoError(#[from] io::Error),
+    #[error("Error Threading:")]
+    ThreadingError(#[from] JoinError),
 }
 
 /// Convert Torservice Param into an Unauthentication TorService:
