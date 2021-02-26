@@ -233,7 +233,7 @@ impl TorService {
             ac.wait_bootstrap().await?;
             ac.take_ownership()
                 .await
-                .map_err(|c| TorErrors::ControlConnectionError(c))?;
+                .map_err(TorErrors::ControlConnectionError)?;
             Ok(OwnedTorService {
                 socks_port: self.socks_port,
                 control_port: self.control_port,
