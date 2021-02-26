@@ -133,6 +133,7 @@ mod tests {
     use serial_test::serial;
     use std::borrow::{Borrow, BorrowMut};
     use std::cell::RefCell;
+    use std::convert::TryInto;
     use std::ops::Deref;
     use std::sync::{Arc, Mutex};
 
@@ -143,7 +144,8 @@ mod tests {
             socks_port: Some(19054),
             data_dir: String::from("/tmp/sifir_rs_sdk/"),
         }
-        .into();
+        .try_into()
+        .unwrap();
         let mut _owned_node = service.into_owned_node();
         let target = "udfpzbte2hommnvag5f3qlouqkhvp3xybhlus2yvfeqdwlhjroe4bbyd.onion:60001";
         // Connecting over Tor takes much longer than 20ms so this should panic
@@ -160,8 +162,9 @@ mod tests {
             socks_port: Some(19054),
             data_dir: String::from("/tmp/sifir_rs_sdk/"),
         }
-        .into();
-        let mut owned_node = service.into_owned_node();
+        .try_into()
+        .unwrap();
+        let mut owned_node = service.into_owned_node().unwrap();
         let target = "kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion:50001";
         let msg = "{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n";
 

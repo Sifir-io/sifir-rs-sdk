@@ -38,7 +38,7 @@ pub extern "C" fn get_owned_TorService(
             socks_port: Some(socks_port),
             data_dir: dir_str,
         };
-        OwnedTorService::new(param)
+        OwnedTorService::new(param)?
     }) {
         Ok(service) => Box::into_raw(Box::new(BoxedResult {
             result: Some(Box::new(service)),
