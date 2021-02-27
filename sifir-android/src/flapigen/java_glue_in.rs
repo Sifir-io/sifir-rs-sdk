@@ -8,7 +8,7 @@ use std::time::Duration;
 
 foreign_class!(class TorServiceParam {
     self_type TorServiceParam;
-    constructor TorServiceParam::new(data_dir:&str,socks_port:u16)->TorServiceParam;
+    constructor TorServiceParam::new(data_dir:&str,socks_port:u16,bootstap_timeout_ms: u64)->TorServiceParam;
 });
 /// OwnedTorService Android Interface
 foreign_class!(class OwnedTorService {

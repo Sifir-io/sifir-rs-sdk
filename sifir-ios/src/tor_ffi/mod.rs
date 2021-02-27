@@ -22,6 +22,7 @@ pub struct BoxedResult<T> {
 pub extern "C" fn get_owned_TorService(
     data_dir: *const c_char,
     socks_port: u16,
+    bootstrap_timeout_ms: u64,
 ) -> *mut BoxedResult<OwnedTorService> {
     match catch_unwind(|| {
         assert!(!data_dir.is_null());
@@ -37,18 +38,16 @@ pub extern "C" fn get_owned_TorService(
         let param = TorServiceParam {
             socks_port: Some(socks_port),
             data_dir: dir_str,
+            bootstrap_timeout_ms: Some(bootstrap_timeout_ms)
         };
-        OwnedTorService::new(param)?
+        OwnedTorService::new(param).unwrap()
     }) {
         Ok(service) => Box::into_raw(Box::new(BoxedResult {
             result: Some(Box::new(service)),
             message: ResultMessage::Success,
         })),
         Err(e) => {
-            let message = match e.downcast::<String>() {
-                Ok(msg) => *msg,
-                Err(_) => String::from("Unknown panic"),
-            };
+            let message: String = format!("Error {:?}", e);
             Box::into_raw(Box::new(BoxedResult {
                 result: None,
                 message: ResultMessage::Error(CString::new(message).unwrap().into_raw()),
@@ -68,14 +67,10 @@ pub unsafe extern "C" fn get_status_of_owned_TorService(
     match node_status {
         Ok(status) => {
             let status_string = serde_json::to_string(&status).unwrap();
-            println!("status is {}", status_string);
             CString::new(status_string).unwrap().into_raw()
         }
         Err(e) => {
-            let message = match e.downcast::<String>() {
-                Ok(msg) => msg,
-                Err(_) => String::from("Unknown error"),
-            };
+            let message: String = format!("Error {:?}", e);
             CString::new(message).unwrap().into_raw()
         }
     }

@@ -1,5 +1,5 @@
-use tor::*;
 use std::convert::TryInto;
+use tor::*;
 
 fn main() {
     println!("---------------");
@@ -12,7 +12,8 @@ fn main() {
         socks_port: Some(socks_port),
         data_dir: String::from("/tmp/sifir_rs_sdk/"),
     }
-    .try_into().unwrap();
+    .try_into()
+    .unwrap();
     println!("---------Starting Tor Daemon and Socks Port ------");
     let mut owned_node = service.into_owned_node().unwrap();
     loop {
