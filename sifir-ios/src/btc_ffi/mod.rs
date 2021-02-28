@@ -1,3 +1,4 @@
+#[cfg(feature = "btc_wallet")]
 use crate::tor_ffi::{BoxedResult, ResultMessage};
 use btc::{generate_wallet_descriptors, Network, WalletCfg, WalletDescriptors};
 use libc::{c_char, c_void};

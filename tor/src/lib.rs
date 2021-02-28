@@ -132,25 +132,60 @@ impl TryFrom<TorServiceParam> for TorService {
     fn try_from(param: TorServiceParam) -> Result<Self, Self::Error> {
         let mut service = Tor::new();
         let socks_port = param.socks_port.unwrap_or(19051);
+        let base_dir = format!("{}/sifir_sdk/tor", param.data_dir);
+        // Create directories
+        fs::create_dir_all(format!("{}/data", base_dir))?;
+        fs::create_dir_all(format!("{}/logs", base_dir))?;
+        fs::create_dir_all(format!("{}/cache", base_dir))?;
+        // Setup logfiles
+        // Create logfile if not existing to avoid issues with mobile
+        // Vector Of Results -> Result of Vectors
+        let info_log_path = format!("{}/logs/sifir_tor_log.info", base_dir);
+        let error_log_path = format!("{}/logs/sifir_tor_log.err", base_dir);
+        let logfiles_check: Result<Vec<_>, _> = vec![&info_log_path, &error_log_path]
+            .iter()
+            .map(|p| {
+                fs::OpenOptions::new()
+                    .write(true)
+                    .read(true)
+                    .create_new(true)
+                    .open(p)
+            })
+            .map(|fr| match fr {
+                Ok(_) => Ok(()),
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::AlreadyExists => {
+                        println!("Log file already exists: {}", e);
+                        Ok(())
+                    }
+                    _ => Err(TorErrors::IoError(e)),
+                },
+            })
+            .collect();
+        let _ = logfiles_check?;
         service
-            .flag(TorFlag::DataDirectory(param.data_dir.clone()))
+            .flag(TorFlag::DataDirectory(format!("{}/data", base_dir)))
+            .flag(TorFlag::DataDirectoryGroupReadable(TorBool::True))
+            .flag(TorFlag::CacheDirectory(format!("{}/cache", base_dir)))
+            .flag(TorFlag::CacheDirectoryGroupReadable("1".into()))
             .flag(TorFlag::SocksPort(socks_port))
             .flag(TorFlag::ControlPortAuto)
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
             .flag(TorFlag::ControlPortWriteToFile(format!(
                 "{}/ctl.info",
-                param.data_dir
+                base_dir
             )))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
-            .flag(TorFlag::TruncateLogFile(TorBool::True))
-            .flag(TorFlag::LogTo(
-                libtor::LogLevel::Info,
-                libtor::LogDestination::File(format!("{}sifir_sdk__tor_log.info", param.data_dir)),
-            ))
-            .flag(TorFlag::LogTo(
-                libtor::LogLevel::Err,
-                libtor::LogDestination::File(format!("{}sifir_sdk__tor_log.err", param.data_dir)),
-            ));
+            .flag(TorFlag::TruncateLogFile(TorBool::True));
+        // TODO log file permissions
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Info,
+        //    libtor::LogDestination::File(info_log_path),
+        //))
+        //.flag(TorFlag::LogTo(
+        //    libtor::LogLevel::Err,
+        //    libtor::LogDestination::File(error_log_path),
+        //));
 
         let handle = service.start_background();
 
@@ -162,7 +197,7 @@ impl TryFrom<TorServiceParam> for TorService {
         // Anyway to *know* when the new config has been written besides checking config file modifed after starting process?
         std::thread::sleep(std::time::Duration::from_millis(1000));
         while !is_ready {
-            let contents = fs::read_to_string(format!("{}/ctl.info", param.data_dir.clone()));
+            let contents = fs::read_to_string(format!("{}/ctl.info", base_dir));
             match contents {
                 Ok(t) => {
                     if !t.contains("PORT=") {
@@ -239,10 +274,11 @@ impl TorService {
             let mut ac = self
                 .get_control_auth_conn(Some(Box::new(handler) as F))
                 .await?;
-            ac.wait_bootstrap(Some(self.bootstrap_timeout_ms)).await?;
+            // take ownership before bootstrap so if we timeout we drop control and shutdown deamon
             ac.take_ownership()
                 .await
                 .map_err(TorErrors::ControlConnectionError)?;
+            ac.wait_bootstrap(Some(self.bootstrap_timeout_ms)).await?;
             Ok(OwnedTorService {
                 socks_port: self.socks_port,
                 control_port: self.control_port,
@@ -265,7 +301,8 @@ impl TryFrom<TorServiceParam> for OwnedTorService {
 /// This is what the FFI and most external libs should be interacting with
 impl OwnedTorService {
     pub fn new(param: TorServiceParam) -> Result<Self, TorErrors> {
-        param.try_into()
+        let owned_result:Result<OwnedTorService,TorErrors> = param.try_into();
+        owned_result
     }
     // TODO check port is not already taken
     pub fn create_hidden_service(
@@ -454,7 +491,7 @@ mod tests {
     fn to_owned() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
-            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+            data_dir: String::from("/tmp/torlib2"),
             bootstrap_timeout_ms: Some(45000),
         }
         .try_into()
@@ -492,7 +529,7 @@ mod tests {
     fn get_status_of_OwnedTorService() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
-            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+            data_dir: String::from("/tmp/sifir_rs_sdk"),
             bootstrap_timeout_ms: Some(45000),
         }
         .try_into()
@@ -507,7 +544,7 @@ mod tests {
     fn TorService_create_hidden_service() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
-            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+            data_dir: String::from("/tmp/sifir_rs_sdk"),
             bootstrap_timeout_ms: Some(45000),
         }
         .try_into()
