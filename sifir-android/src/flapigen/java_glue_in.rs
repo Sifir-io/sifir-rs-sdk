@@ -13,26 +13,30 @@ foreign_class!(class TorServiceParam {
 /// OwnedTorService Android Interface
 foreign_class!(class OwnedTorService {
     self_type OwnedTorService;
-    constructor OwnedTorService::new(param:TorServiceParam)->OwnedTorService;
+    constructor new(param:TorServiceParam)->OwnedTorService {
+        OwnedTorService::new(param).unwrap()
+    }
     fn getSocksPort(&self)-> u16{
         this.socks_port
     }
-    fn OwnedTorService::shutdown(&mut self);
+    fn shutdown(&mut self){
+        this.shutdown().unwrap();
+    }
     fn get_status(&mut self)-> String{
         let node_status = this.get_status();
         match node_status {
-        Ok(status) => {
-            let status_string = serde_json::to_string(&status).unwrap();
-            println!("status is {}", status_string);
-            status_string
-        }
-        Err(e) => {
-            let message = match e.downcast::<String>() {
-                Ok(msg) => msg,
-                Err(_) => String::from("Unknown error"),
-            };
-            message
-        }
+            Ok(status) => {
+                let status_string = serde_json::to_string(&status).unwrap();
+                status_string
+            }
+            Err(e) => {
+                let message = e.to_string();
+                //let message = match e.downcast::<String>() {
+                //    Ok(msg) => msg,
+                //    Err(_) => String::from("Unknown error"),
+                //};
+                message
+            }
 
     }}}
 
