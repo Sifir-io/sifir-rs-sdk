@@ -1,4 +1,5 @@
 #! /bin/bash
+cd ..
 OS=`uname`
 if [ "$OS" = "Darwin" ]
 then

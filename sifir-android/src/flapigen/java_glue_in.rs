@@ -1,10 +1,13 @@
+extern crate android_logger;
+
 use jni_sys::*;
+use log::{debug, info};
 use serde::Serialize;
+use std::time::Duration;
 use tor::{
     tcp_stream::{DataObserver, TcpSocksStream},
     BootstrapPhase, OwnedTorService, OwnedTorServiceBootstrapPhase, TorServiceParam,
 };
-use std::time::Duration;
 
 foreign_class!(class TorServiceParam {
     self_type TorServiceParam;
@@ -14,6 +17,13 @@ foreign_class!(class TorServiceParam {
 foreign_class!(class OwnedTorService {
     self_type OwnedTorService;
     constructor new(param:TorServiceParam)->OwnedTorService {
+         android_logger::init_once(
+         android_logger::Config::default()
+                .with_min_level(log::Level::Debug)
+                .with_tag("sifir-rs-sdk"),
+        );
+        log_panics::init(); // log panics rather than printing them
+        info!("Getting OwnedTorService");
         OwnedTorService::new(param).unwrap()
     }
     fn getSocksPort(&self)-> u16{
@@ -37,10 +47,9 @@ foreign_class!(class OwnedTorService {
                 //};
                 message
             }
-
-    }}}
-
-);
+       }
+    }
+});
 
 /// Java callback interface for TcpStream
 foreign_callback!(callback DataObserver {

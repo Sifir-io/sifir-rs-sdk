@@ -1,15 +1,11 @@
 pub mod tcp_stream;
 
-// use crate::utils;
-// use anyhow::{anyhow, Context, Result};
-use crate::TorErrors::TorLibError;
 use futures::{Future, TryStreamExt};
 use lazy_static::*;
-use libtor::{LogDestination, Tor, TorAddress, TorBool, TorFlag};
+use libtor::{Tor, TorAddress, TorBool, TorFlag};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::convert::{TryFrom, TryInto};
-use std::fmt;
 use std::fs;
 use std::io;
 use std::io::{Read, Write};
@@ -133,15 +129,18 @@ impl TryFrom<TorServiceParam> for TorService {
         let mut service = Tor::new();
         let socks_port = param.socks_port.unwrap_or(19051);
         let base_dir = format!("{}/sifir_sdk/tor", param.data_dir);
+        let data_dir =  format!("{}/data", base_dir);
+        let cache_dir =  format!("{}/cache", base_dir);
+        let ctl_file_path =  format!("{}/ctl.info",base_dir);
+        let info_log_path = format!("{}/logs/sifir_tor_log.info", base_dir);
+        let error_log_path = format!("{}/logs/sifir_tor_log.err", base_dir);
         // Create directories
-        fs::create_dir_all(format!("{}/data", base_dir))?;
+        fs::create_dir_all(data_dir.clone())?;
         fs::create_dir_all(format!("{}/logs", base_dir))?;
-        fs::create_dir_all(format!("{}/cache", base_dir))?;
+        fs::create_dir_all(cache_dir.clone())?;
         // Setup logfiles
         // Create logfile if not existing to avoid issues with mobile
         // Vector Of Results -> Result of Vectors
-        let info_log_path = format!("{}/logs/sifir_tor_log.info", base_dir);
-        let error_log_path = format!("{}/logs/sifir_tor_log.err", base_dir);
         let logfiles_check: Result<Vec<_>, _> = vec![&info_log_path, &error_log_path]
             .iter()
             .map(|p| {
@@ -164,40 +163,37 @@ impl TryFrom<TorServiceParam> for TorService {
             .collect();
         let _ = logfiles_check?;
         service
-            .flag(TorFlag::DataDirectory(format!("{}/data", base_dir)))
-            .flag(TorFlag::DataDirectoryGroupReadable(TorBool::True))
-            .flag(TorFlag::CacheDirectory(format!("{}/cache", base_dir)))
-            .flag(TorFlag::CacheDirectoryGroupReadable("1".into()))
+            .flag(TorFlag::DataDirectory(data_dir))
+            // Note: Making data dir group readble breaks android
+            //.flag(TorFlag::DataDirectoryGroupReadable(TorBool::True))
+            .flag(TorFlag::CacheDirectory(cache_dir))
+            //.flag(TorFlag::CacheDirectoryGroupReadable("1".into()))
             .flag(TorFlag::SocksPort(socks_port))
             .flag(TorFlag::ControlPortAuto)
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
-            .flag(TorFlag::ControlPortWriteToFile(format!(
-                "{}/ctl.info",
-                base_dir
-            )))
+            .flag(TorFlag::ControlPortWriteToFile(ctl_file_path.clone()))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
-            .flag(TorFlag::TruncateLogFile(TorBool::True));
-        // TODO log file permissions
-        //.flag(TorFlag::LogTo(
-        //    libtor::LogLevel::Info,
-        //    libtor::LogDestination::File(info_log_path),
-        //))
-        //.flag(TorFlag::LogTo(
-        //    libtor::LogLevel::Err,
-        //    libtor::LogDestination::File(error_log_path),
-        //));
+            .flag(TorFlag::TruncateLogFile(TorBool::True))
+        .flag(TorFlag::LogTo(
+            libtor::LogLevel::Info,
+            libtor::LogDestination::File(info_log_path),
+        ))
+        .flag(TorFlag::LogTo(
+            libtor::LogLevel::Err,
+            libtor::LogDestination::File(error_log_path),
+        ));
 
         let handle = service.start_background();
 
         let mut is_ready = false;
         let mut control_port = String::new();
         let mut try_times = 0;
-        // TODO We wait for Tor to write the new config file otherwise we risk reading the old config and port.
+        // We wait for Tor to write the new config file otherwise we risk reading the old config and port.
         // Anything less than a second and iOS errors out
-        // Anyway to *know* when the new config has been written besides checking config file modifed after starting process?
+        // TODO Anyway to *know* when the new config has been written besides checking config file modifed after starting process?
         std::thread::sleep(std::time::Duration::from_millis(1000));
         while !is_ready {
-            let contents = fs::read_to_string(format!("{}/ctl.info", base_dir));
+            let contents = fs::read_to_string(ctl_file_path.clone());
             match contents {
                 Ok(t) => {
                     if !t.contains("PORT=") {
@@ -205,18 +201,19 @@ impl TryFrom<TorServiceParam> for TorService {
                     };
                     let data: Vec<&str> = t.split("PORT=").collect();
                     control_port = data[1].into();
+                    println!("Tor success with config port!");
                     is_ready = true;
                 }
                 Err(e) => {
                     try_times += 1;
                     if try_times > 10 {
                         return Err(TorErrors::BootStrapError(String::from(
-                            "ControlConnectionError",
+                            "Unable to read daemon control info",
                         )));
                     }
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(700));
+            std::thread::sleep(std::time::Duration::from_millis(900));
         }
 
         Ok(TorService {
@@ -235,7 +232,6 @@ fn handler(_: AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), Con
 
 impl TorService {
     pub fn new(param: TorServiceParam) -> Result<Self, TorErrors> {
-        // FIXME store the param timeout here so we don't have to recall get owned with it
         param.try_into()
     }
     async fn get_control_auth_conn<F>(

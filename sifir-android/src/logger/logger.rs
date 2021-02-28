@@ -5,7 +5,7 @@ pub fn initLogger() {
     android_logger::init_once(
         android_logger::Config::default()
             .with_min_level(log::Level::Debug)
-            .with_tag("RustLogger"),
+            .with_tag("sifir-rs-sdk"),
     );
     log_panics::init(); // log panics rather than printing them
     info!("Logger initialized");
