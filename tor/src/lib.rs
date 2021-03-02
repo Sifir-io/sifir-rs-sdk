@@ -129,9 +129,9 @@ impl TryFrom<TorServiceParam> for TorService {
         let mut service = Tor::new();
         let socks_port = param.socks_port.unwrap_or(19051);
         let base_dir = format!("{}/sifir_sdk/tor", param.data_dir);
-        let data_dir =  format!("{}/data", base_dir);
-        let cache_dir =  format!("{}/cache", base_dir);
-        let ctl_file_path =  format!("{}/ctl.info",base_dir);
+        let data_dir = format!("{}/data", base_dir);
+        let cache_dir = format!("{}/cache", base_dir);
+        let ctl_file_path = format!("{}/ctl.info", base_dir);
         let info_log_path = format!("{}/logs/sifir_tor_log.info", base_dir);
         let error_log_path = format!("{}/logs/sifir_tor_log.err", base_dir);
         // Create directories
@@ -173,15 +173,20 @@ impl TryFrom<TorServiceParam> for TorService {
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
             .flag(TorFlag::ControlPortWriteToFile(ctl_file_path.clone()))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
-            .flag(TorFlag::TruncateLogFile(TorBool::True))
-        .flag(TorFlag::LogTo(
-            libtor::LogLevel::Info,
-            libtor::LogDestination::File(info_log_path),
-        ))
-        .flag(TorFlag::LogTo(
-            libtor::LogLevel::Err,
-            libtor::LogDestination::File(error_log_path),
-        ));
+            .flag(TorFlag::TruncateLogFile(TorBool::True));
+        // TODO Logging breaks Bootstrapping on IOS, probably permissions issue.
+        #[cfg(not(target_os = "ios"))]
+        {
+            service
+                .flag(TorFlag::LogTo(
+                    libtor::LogLevel::Info,
+                    libtor::LogDestination::File(info_log_path),
+                ))
+                .flag(TorFlag::LogTo(
+                    libtor::LogLevel::Err,
+                    libtor::LogDestination::File(error_log_path),
+                ));
+        }
 
         let handle = service.start_background();
 
@@ -297,7 +302,7 @@ impl TryFrom<TorServiceParam> for OwnedTorService {
 /// This is what the FFI and most external libs should be interacting with
 impl OwnedTorService {
     pub fn new(param: TorServiceParam) -> Result<Self, TorErrors> {
-        let owned_result:Result<OwnedTorService,TorErrors> = param.try_into();
+        let owned_result: Result<OwnedTorService, TorErrors> = param.try_into();
         owned_result
     }
     // TODO check port is not already taken

@@ -47,7 +47,7 @@ pub extern "C" fn get_owned_TorService(
             message: ResultMessage::Success,
         })),
         Err(e) => {
-            let message = match e.downcast::<String>(){
+            let message = match e.downcast::<String>() {
                 Ok(msg) => *msg,
                 Err(_) => String::from("Unknown panic"),
             };
