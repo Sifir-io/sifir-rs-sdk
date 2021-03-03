@@ -1,5 +1,4 @@
 extern crate android_logger;
-
 use jni_sys::*;
 use log::{debug, info};
 use serde::Serialize;
@@ -8,16 +7,6 @@ use tor::{
     tcp_stream::{DataObserver, TcpSocksStream},
     BootstrapPhase, OwnedTorService, OwnedTorServiceBootstrapPhase, TorServiceParam,
 };
-/// TODO Taken from ios tor ffi. Put in one place with platform depedant cfg
-pub enum ResultMessage {
-    Success,
-    Error(String),
-}
-pub struct BoxedResult<T> {
-    pub result: Option<Box<T>>,
-    pub message: ResultMessage,
-}
-
 
 foreign_class!(class TorServiceParam {
     self_type TorServiceParam;
@@ -26,34 +15,15 @@ foreign_class!(class TorServiceParam {
 /// OwnedTorService Android Interface
 foreign_class!(class OwnedTorService {
     self_type OwnedTorService;
-    constructor new(param:TorServiceParam)->ResultMessage<OwnedTorService> {
+    constructor new(param:TorServiceParam)->Result<OwnedTorService,String> {
          android_logger::init_once(
          android_logger::Config::default()
                 .with_min_level(log::Level::Debug)
                 .with_tag("sifir-rs-sdk"),
         );
         log_panics::init(); // log panics rather than printing them
-         info!("logging started");
-            match catch_unwind(move || {
-                info!("Getting OwnedTorService");
-                OwnedTorService::new(param).unwrap()
-    }) {
-        Ok(service) => Box::into_raw(Box::new(BoxedResult {
-            result: Some(Box::new(service)),
-            message: ResultMessage::Success,
-        })),
-        Err(e) => {
-            let message = match e.downcast::<String>() {
-                Ok(msg) => *msg,
-                Err(_) => String::from("Unknown panic"),
-            };
-            Box::into_raw(Box::new(BoxedResult {
-                result: None,
-                message: ResultMessage::Error(message)
-            }))
-        }
-      }
-    }
+        info!("logging started");
+        OwnedTorService::new(param).map_err(|e| { format!("{:#?}",e)})
     }
     fn getSocksPort(&self)-> u16{
         this.socks_port
@@ -105,8 +75,11 @@ impl DataObserver for Observer {
 /// TcpStream Android Interface
 foreign_class!(class TcpSocksStream {
     self_type TcpSocksStream;
-    constructor new(target:String,socks_proxy:String,timeout_ms:u64)->TcpSocksStream {
-            TcpSocksStream::new_timeout(target,socks_proxy,timeout_ms).unwrap()
+    constructor new(target:String,socks_proxy:String,timeout_ms:u64)->Result<TcpSocksStream,String> {
+      TcpSocksStream::new_timeout(target,socks_proxy,timeout_ms).map_err(|e| {
+                                                        format!("{:#?}",e)
+    })
+
     }
     fn on_data(&self,cb:Box<dyn DataObserver>){
       this.on_data(Observer{
