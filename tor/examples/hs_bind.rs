@@ -1,3 +1,4 @@
+use std::convert::TryInto;
 use tor::*;
 
 fn main() {
@@ -10,10 +11,12 @@ fn main() {
     let service: TorService = TorServiceParam {
         socks_port: Some(socks_port),
         data_dir: String::from("/tmp/sifir_rs_sdk/"),
+        bootstrap_timeout_ms: Some(45000),
     }
-    .into();
+    .try_into()
+    .unwrap();
     println!("---------Starting Tor Daemon and Socks Port ------");
-    let mut owned_node = service.into_owned_node();
+    let mut owned_node = service.into_owned_node().unwrap();
     loop {
         println!("Enter a port to foward onion:");
         let mut port = String::new();

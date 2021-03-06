@@ -4,10 +4,10 @@ package com.sifir.tor;
 
 public final class TorServiceParam {
 
-    public TorServiceParam(String data_dir, int socks_port) {
-        mNativeObj = init(data_dir, socks_port);
+    public TorServiceParam(String data_dir, int socks_port, long bootstap_timeout_ms) {
+        mNativeObj = init(data_dir, socks_port, bootstap_timeout_ms);
     }
-    private static native long init(String data_dir, int socks_port);
+    private static native long init(String data_dir, int socks_port, long bootstap_timeout_ms);
 
     public synchronized void delete() {
         if (mNativeObj != 0) {

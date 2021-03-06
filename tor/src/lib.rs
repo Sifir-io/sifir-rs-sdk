@@ -1,20 +1,23 @@
 pub mod tcp_stream;
 
-// use crate::utils;
-use anyhow::Result;
-use futures::Future;
+use futures::{Future, TryStreamExt};
 use lazy_static::*;
-use libtor::{LogDestination, Tor, TorAddress, TorBool, TorFlag};
+use libtor::{Tor, TorAddress, TorBool, TorFlag};
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
+use std::convert::{TryFrom, TryInto};
 use std::fs;
+use std::io;
 use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::net::{TcpListener, ToSocketAddrs};
 use std::pin::Pin;
 use std::sync::Mutex;
 use std::thread::JoinHandle;
+use thiserror::Error;
 use tokio::net::TcpStream;
+use tokio::task::JoinError;
+use tokio::time::{timeout, Duration};
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
 
@@ -34,13 +37,15 @@ lazy_static! {
 pub struct TorServiceParam {
     pub socks_port: Option<u16>,
     pub data_dir: String,
+    pub bootstrap_timeout_ms: Option<u64>,
 }
 
 impl TorServiceParam {
-    pub fn new(data_dir: &str, socks_port: u16) -> TorServiceParam {
+    pub fn new(data_dir: &str, socks_port: u16, bootstap_timeout_ms: u64) -> TorServiceParam {
         TorServiceParam {
             data_dir: String::from(data_dir),
             socks_port: Some(socks_port),
+            bootstrap_timeout_ms: Some(bootstap_timeout_ms),
         }
     }
 }
@@ -48,6 +53,7 @@ impl TorServiceParam {
 pub struct TorService {
     socks_port: u16,
     control_port: String,
+    bootstrap_timeout_ms: u64,
     _handle: Option<JoinHandle<Result<u8, libtor::Error>>>,
 }
 
@@ -89,74 +95,138 @@ pub enum OwnedTorServiceBootstrapPhase {
 /// note control functions to FFI and user
 trait TorControlApi {
     // async fns in traits are a shit show
-    fn wait_bootstrap(&mut self) -> Pin<Box<dyn Future<Output = Result<bool, ()>> + '_>>;
+    fn wait_bootstrap(
+        &mut self,
+        timeout_ms: Option<u64>,
+    ) -> Pin<Box<dyn Future<Output = Result<bool, TorErrors>> + '_>>;
     fn shutdown(self);
     fn get_status(
         &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<OwnedTorServiceBootstrapPhase, ()>> + '_>>;
+    ) -> Pin<Box<dyn Future<Output = Result<OwnedTorServiceBootstrapPhase, TorErrors>> + '_>>;
+}
+
+#[derive(Error, Debug)]
+pub enum TorErrors {
+    #[error("Control connection error: {:?}",.0)]
+    ControlConnectionError(ConnError),
+    #[error("Error with Tor daemon:")]
+    TorLibError(#[from] libtor::Error),
+    #[error("Error Bootstraping:")]
+    BootStrapError(String),
+    #[error("Error Bootstraping:")]
+    IoError(#[from] io::Error),
+    #[error("Error Threading:")]
+    ThreadingError(#[from] JoinError),
 }
 
 /// Convert Torservice Param into an Unauthentication TorService:
 /// Instantiates the Tor service on a seperate thread, however does not take ownership
 /// nor await it's completion of the BootstrapPhase
-impl From<TorServiceParam> for TorService {
-    fn from(param: TorServiceParam) -> Self {
+// TODO make timeout a param, but how can we kill backgroun without having access ?
+impl TryFrom<TorServiceParam> for TorService {
+    type Error = TorErrors;
+    fn try_from(param: TorServiceParam) -> Result<Self, Self::Error> {
         let mut service = Tor::new();
         let socks_port = param.socks_port.unwrap_or(19051);
+        let base_dir = format!("{}/sifir_sdk/tor", param.data_dir);
+        let data_dir = format!("{}/data", base_dir);
+        let cache_dir = format!("{}/cache", base_dir);
+        let ctl_file_path = format!("{}/ctl.info", base_dir);
+        let info_log_path = format!("{}/logs/sifir_tor_log.info", base_dir);
+        let error_log_path = format!("{}/logs/sifir_tor_log.err", base_dir);
+        // Create directories
+        fs::create_dir_all(data_dir.clone())?;
+        fs::create_dir_all(format!("{}/logs", base_dir))?;
+        fs::create_dir_all(cache_dir.clone())?;
+        // Setup logfiles
+        // Create logfile if not existing to avoid issues with mobile
+        // Vector Of Results -> Result of Vectors
+        let logfiles_check: Result<Vec<_>, _> = vec![&info_log_path, &error_log_path]
+            .iter()
+            .map(|p| {
+                fs::OpenOptions::new()
+                    .write(true)
+                    .read(true)
+                    .create_new(true)
+                    .open(p)
+            })
+            .map(|fr| match fr {
+                Ok(_) => Ok(()),
+                Err(e) => match e.kind() {
+                    std::io::ErrorKind::AlreadyExists => {
+                        println!("Log file already exists: {}", e);
+                        Ok(())
+                    }
+                    _ => Err(TorErrors::IoError(e)),
+                },
+            })
+            .collect();
+        let _ = logfiles_check?;
         service
-            .flag(TorFlag::DataDirectory(param.data_dir.clone()))
+            .flag(TorFlag::DataDirectory(data_dir))
+            // Note: Making data dir group readble breaks android
+            //.flag(TorFlag::DataDirectoryGroupReadable(TorBool::True))
+            .flag(TorFlag::CacheDirectory(cache_dir))
+            //.flag(TorFlag::CacheDirectoryGroupReadable("1".into()))
             .flag(TorFlag::SocksPort(socks_port))
             .flag(TorFlag::ControlPortAuto)
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
-            .flag(TorFlag::ControlPortWriteToFile(format!(
-                "{}/ctl.info",
-                param.data_dir
-            )))
+            .flag(TorFlag::ControlPortWriteToFile(ctl_file_path.clone()))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
             .flag(TorFlag::TruncateLogFile(TorBool::True));
-        // FIXME bug in flag or permissions ?
-        //.flag(TorFlag::LogTo(
-        //    libtor::LogLevel::Info,
-        //    libtor::LogDestination::File(format!("{}tor_log.info", param.data_dir)),
-        //))
-        //.flag(TorFlag::LogTo(
-        //    libtor::LogLevel::Err,
-        //    libtor::LogDestination::File(format!("{}tor_log.err", param.data_dir)),
-        //));
+        // TODO Logging breaks Bootstrapping on IOS, probably permissions issue.
+        #[cfg(not(target_os = "ios"))]
+        {
+            service
+                .flag(TorFlag::LogTo(
+                    libtor::LogLevel::Info,
+                    libtor::LogDestination::File(info_log_path),
+                ))
+                .flag(TorFlag::LogTo(
+                    libtor::LogLevel::Err,
+                    libtor::LogDestination::File(error_log_path),
+                ));
+        }
 
         let handle = service.start_background();
 
         let mut is_ready = false;
         let mut control_port = String::new();
         let mut try_times = 0;
-        // TODO We wait for Tor to write the new config file otherwise we risk reading the old config and port.
+        // We wait for Tor to write the new config file otherwise we risk reading the old config and port.
         // Anything less than a second and iOS errors out
-        // Anyway to *know* when the new config has been written besides checking config file modifed after starting process?
+        // TODO Anyway to *know* when the new config has been written besides checking config file modifed after starting process?
         std::thread::sleep(std::time::Duration::from_millis(1000));
         while !is_ready {
-            let contents = fs::read_to_string(format!("{}/ctl.info", param.data_dir.clone()));
+            let contents = fs::read_to_string(ctl_file_path.clone());
             match contents {
                 Ok(t) => {
-                    assert!(t.contains("PORT="));
+                    if !t.contains("PORT=") {
+                        return Err(TorErrors::BootStrapError(String::from("No port in config")));
+                    };
                     let data: Vec<&str> = t.split("PORT=").collect();
                     control_port = data[1].into();
+                    println!("Tor success with config port!");
                     is_ready = true;
                 }
                 Err(e) => {
                     try_times += 1;
                     if try_times > 10 {
-                        panic!("Could load Tor control config file");
+                        return Err(TorErrors::BootStrapError(String::from(
+                            "Unable to read daemon control info",
+                        )));
                     }
                 }
             }
-            std::thread::sleep(std::time::Duration::from_millis(700));
+            std::thread::sleep(std::time::Duration::from_millis(900));
         }
 
-        TorService {
+        Ok(TorService {
             socks_port,
             control_port,
+            bootstrap_timeout_ms: param.bootstrap_timeout_ms.unwrap_or(45000),
             _handle: Some(handle),
-        }
+        })
     }
 }
 /// Async handler injected into Torut to recieve Tor daemon async events
@@ -166,48 +236,64 @@ fn handler(_: AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), Con
 }
 
 impl TorService {
-    pub fn new(param: TorServiceParam) -> Self {
-        param.into()
+    pub fn new(param: TorServiceParam) -> Result<Self, TorErrors> {
+        param.try_into()
     }
-    async fn get_control_auth_conn<F>(&self, handle: Option<F>) -> AuthenticatedConn<TcpStream, F> {
-        let s = TcpStream::connect(self.control_port.trim()).await.unwrap();
+    async fn get_control_auth_conn<F>(
+        &self,
+        handle: Option<F>,
+    ) -> Result<AuthenticatedConn<TcpStream, F>, TorErrors> {
+        let s = TcpStream::connect(self.control_port.trim()).await?;
         let mut utc = UnauthenticatedConn::new(s);
         // returns node info + cookie location ?
-        let proto_info = utc.load_protocol_info().await.unwrap();
+        let proto_info = utc
+            .load_protocol_info()
+            .await
+            .map_err(TorErrors::ControlConnectionError)?;
         // loads cookie from loaded data and build auth info
-        let auth = proto_info.make_auth_data().unwrap().unwrap();
-        utc.authenticate(&auth).await.unwrap();
+        let auth = proto_info
+            .make_auth_data()?
+            .ok_or(TorErrors::BootStrapError(String::from(
+                "Error making control auth data",
+            )))?;
+        utc.authenticate(&auth)
+            .await
+            .map_err(TorErrors::ControlConnectionError)?;
         // upgrade connection to authenticated
         let mut ac = utc.into_authenticated().await;
         if handle.is_some() {
             ac.set_async_event_handler(handle);
         }
-        ac
+        Ok(ac)
     }
 
     /// Converts TorService to OwnedTorService, consuming the TorService
     /// and returning an OwnedTorService which is fully bootstrapped and under our control
     /// (If we drop this object the Tor daemon will shut down)
-    pub fn into_owned_node(self) -> OwnedTorService {
+    pub fn into_owned_node(self) -> Result<OwnedTorService, TorErrors> {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut ac = self
                 .get_control_auth_conn(Some(Box::new(handler) as F))
-                .await;
-            ac.wait_bootstrap().await.unwrap();
-            ac.take_ownership().await.unwrap();
-            OwnedTorService {
+                .await?;
+            // take ownership before bootstrap so if we timeout we drop control and shutdown deamon
+            ac.take_ownership()
+                .await
+                .map_err(TorErrors::ControlConnectionError)?;
+            ac.wait_bootstrap(Some(self.bootstrap_timeout_ms)).await?;
+            Ok(OwnedTorService {
                 socks_port: self.socks_port,
                 control_port: self.control_port,
                 _handle: self._handle,
                 _ctl: RefCell::new(Some(ac)),
-            }
+            })
         })
     }
 }
 
-impl From<TorServiceParam> for OwnedTorService {
-    fn from(param: TorServiceParam) -> Self {
-        let t: TorService = param.into();
+impl TryFrom<TorServiceParam> for OwnedTorService {
+    type Error = TorErrors;
+    fn try_from(param: TorServiceParam) -> Result<Self, Self::Error> {
+        let t: TorService = param.try_into()?;
         t.into_owned_node()
     }
 }
@@ -215,17 +301,20 @@ impl From<TorServiceParam> for OwnedTorService {
 /// Implementation when TorService has AuthenticatedConnection established
 /// This is what the FFI and most external libs should be interacting with
 impl OwnedTorService {
-    pub fn new(param: TorServiceParam) -> Self {
-        param.into()
+    pub fn new(param: TorServiceParam) -> Result<Self, TorErrors> {
+        let owned_result: Result<OwnedTorService, TorErrors> = param.try_into();
+        owned_result
     }
     // TODO check port is not already taken
     pub fn create_hidden_service(
         &mut self,
         param: TorHiddenServiceParam,
-    ) -> Result<TorHiddenService, ConnError> {
+    ) -> Result<TorHiddenService, TorErrors> {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut _ctl = self._ctl.borrow_mut();
-            let ctl = _ctl.as_mut().unwrap();
+            let ctl = _ctl
+                .as_mut()
+                .ok_or(TorErrors::BootStrapError(String::from("Error mut lock")))?;
 
             let service_key = match param.secret_key {
                 Some(key) => key.into(),
@@ -245,7 +334,8 @@ impl OwnedTorService {
                 .iter(),
             )
             .await
-            .unwrap();
+            .map_err(TorErrors::ControlConnectionError)?;
+
             let onion_url = TorAddress::AddressPort(
                 service_key.public().get_onion_address().to_string(),
                 param.hs_port,
@@ -261,20 +351,33 @@ impl OwnedTorService {
     /// Get the status of the Tor daemon we own
     /// OwnedTorServiceBootstrapPhase will either be Done or Other(String) containing the stage of
     /// the boostrap the node is a
-    pub fn get_status(&self) -> Result<OwnedTorServiceBootstrapPhase> {
+    pub fn get_status(&self) -> Result<OwnedTorServiceBootstrapPhase, TorErrors> {
         (*RUNTIME).lock().unwrap().block_on(async {
             let mut ctl = self._ctl.borrow_mut();
-            Ok(ctl.as_mut().unwrap().get_status().await.unwrap())
+            let r = ctl
+                .as_mut()
+                .ok_or(TorErrors::BootStrapError("Unable to get mut".into()))?
+                .get_status()
+                .await?;
+            Ok(r)
         })
     }
     /// take control conn and drop it.
     /// Closing the owned connection and causes tor daemon to shutdown
     /// Then waits on the Tor daemon thread to exit
-    pub fn shutdown(&mut self) {
+    pub fn shutdown(&mut self) -> Result<(), TorErrors> {
         {
             let _ = self._ctl.borrow_mut().take();
         }
-        let _ = self._handle.take().unwrap().join();
+        let _ = self
+            ._handle
+            .take()
+            .ok_or(TorErrors::BootStrapError(String::from(
+                "Error shutdown take handle",
+            )))?
+            .join()
+            .map_err(|e| TorErrors::BootStrapError(String::from("Error joining on shutdown")))?;
+        Ok(())
     }
 }
 /// High level API for Torut used internally by TorService to expose
@@ -284,23 +387,40 @@ where
     H: Fn(AsyncEvent<'static>) -> F,
     F: Future<Output = Result<(), ConnError>>,
 {
-    fn wait_bootstrap(&mut self) -> Pin<Box<dyn Future<Output = Result<bool, ()>> + '_>> {
+    fn wait_bootstrap(
+        &mut self,
+        timeout_ms: Option<u64>,
+    ) -> Pin<Box<dyn Future<Output = Result<bool, TorErrors>> + '_>> {
         // Wait for boostrap to be done
-        Box::pin(async move {
-            let mut input = String::new();
-            while !input.trim().contains("PROGRESS=100 TAG=done") {
-                input = self.get_info("status/bootstrap-phase").await.unwrap();
-                std::thread::sleep(std::time::Duration::from_millis(300));
-            }
-            Ok(true)
-        })
+        let future = async move {
+            timeout(
+                Duration::from_millis(timeout_ms.unwrap_or(15000)),
+                async move {
+                    let mut input = String::new();
+                    while !input.trim().contains("PROGRESS=100 TAG=done") {
+                        input = self
+                            .get_info("status/bootstrap-phase")
+                            .await
+                            .map_err(TorErrors::ControlConnectionError)?;
+                        std::thread::sleep(std::time::Duration::from_millis(300));
+                    }
+                    Ok(true)
+                },
+            )
+            .await
+            .map_err(|e| TorErrors::BootStrapError(String::from("Timeout waiting for boostrap")))?
+        };
+        Box::pin(future)
     }
     fn get_status(
         &mut self,
-    ) -> Pin<Box<dyn Future<Output = Result<OwnedTorServiceBootstrapPhase, ()>> + '_>> {
+    ) -> Pin<Box<dyn Future<Output = Result<OwnedTorServiceBootstrapPhase, TorErrors>> + '_>> {
         // Wait for boostrap to be done
         Box::pin(async move {
-            let input = self.get_info("status/bootstrap-phase").await.unwrap();
+            let input = self
+                .get_info("status/bootstrap-phase")
+                .await
+                .map_err(TorErrors::ControlConnectionError)?;
             if input.trim().contains("TAG=done") {
                 Ok(OwnedTorServiceBootstrapPhase::Done)
             } else {
@@ -320,39 +440,66 @@ mod tests {
     use serial_test::serial;
     use socks::{Socks5Datagram, ToTargetAddr};
     use std::borrow::Borrow;
+    use std::convert::TryInto;
     use std::io::{Read, Write};
     use std::net::{TcpListener, ToSocketAddrs};
 
-    //#[tokio::test]
-    //#[serial(tor)]
-    //async fn get_from_param_and_await_boostrap_using_TorControlApi() {
-    //    let service: TorService = TorServiceParam {
-    //        socks_port: Some(19051),
-    //        data_dir: String::from("/tmp/torlib2"),
-    //    }
-    //    .into();
-    //    assert_eq!(service.socks_port, 19051);
-    //    assert_eq!(service.control_port.contains("127.0.0.1:"), true);
-    //    assert_eq!(service._handle.is_some(), true);
-    //    let mut control_conn = service.get_control_auth_conn(Some(hand//ler)).await;
-    //    let bootsraped = control_conn.wait_bootstrap().await.unwrap();
-    //    assert_eq!(bootsraped, true);
-    //    control_conn.take_ownership().await.unwrap();
-    //    control_conn.shutdown();
-    //    let _ = service._handle.unwrap().join();
-    //}
+    #[test]
+    #[serial(tor)]
+    fn get_from_param_and_await_boostrap_using_TorControlApi() {
+        (*RUNTIME).lock().unwrap().block_on(async {
+            let service: TorService = TorServiceParam {
+                socks_port: Some(19051),
+                data_dir: String::from("/tmp/torlib2"),
+                bootstrap_timeout_ms: Some(45000),
+            }
+            .try_into()
+            .unwrap();
+            assert_eq!(service.socks_port, 19051);
+            assert_eq!(service.control_port.contains("127.0.0.1:"), true);
+            assert_eq!(service._handle.is_some(), true);
+            let mut control_conn = service.get_control_auth_conn(Some(handler)).await.unwrap();
+            let bootsraped = control_conn.wait_bootstrap(Some(20000)).await.unwrap();
+            assert_eq!(bootsraped, true);
+            control_conn.take_ownership().await.unwrap();
+            control_conn.shutdown();
+            let _ = service._handle.unwrap().join();
+        });
+    }
 
     #[test]
     #[serial(tor)]
-    fn TorService_can_use_run_time_and_convert_to_OwnedTorservice() {
+    fn bootstrap_timeout() {
+        (*RUNTIME).lock().unwrap().block_on(async {
+            let service: TorService = TorServiceParam {
+                socks_port: Some(19051),
+                data_dir: String::from("/tmp/torlib2"),
+                bootstrap_timeout_ms: Some(1000),
+            }
+            .try_into()
+            .unwrap();
+            assert_eq!(service.socks_port, 19051);
+            assert_eq!(service.control_port.contains("127.0.0.1:"), true);
+            assert_eq!(service._handle.is_some(), true);
+            let mut control_conn = service.get_control_auth_conn(Some(handler)).await.unwrap();
+            let bootsraped = control_conn.wait_bootstrap(Some(500)).await;
+            assert_eq!(bootsraped.is_err(), true);
+        });
+    }
+
+    #[test]
+    #[serial(tor)]
+    fn to_owned() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
-            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+            data_dir: String::from("/tmp/torlib2"),
+            bootstrap_timeout_ms: Some(45000),
         }
-        .into();
+        .try_into()
+        .unwrap();
         let client = utils::get_proxied_client(service.socks_port).unwrap();
 
-        let mut owned_node = service.into_owned_node();
+        let mut owned_node = service.into_owned_node().unwrap();
         (*RUNTIME).lock().unwrap().block_on(async {
             let resp = client
                 .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
@@ -362,7 +509,20 @@ mod tests {
             assert_eq!(resp.status(), 200);
         });
         // take ctl and drop it
-        owned_node.shutdown();
+        owned_node.shutdown().unwrap();
+    }
+
+    #[test]
+    #[serial(tor)]
+    fn to_owned_with_timeout() {
+        let service: TorService = TorServiceParam {
+            socks_port: Some(19054),
+            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+            bootstrap_timeout_ms: Some(30000),
+        }
+        .try_into()
+        .unwrap();
+        assert_eq!(service.into_owned_node().is_err(), true);
     }
 
     #[test]
@@ -370,24 +530,28 @@ mod tests {
     fn get_status_of_OwnedTorService() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
-            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+            data_dir: String::from("/tmp/sifir_rs_sdk"),
+            bootstrap_timeout_ms: Some(45000),
         }
-        .into();
-        let mut owned_node = service.into_owned_node();
+        .try_into()
+        .unwrap();
+        let mut owned_node = service.into_owned_node().unwrap();
         let status = owned_node.get_status().unwrap();
         assert!(matches!(status, OwnedTorServiceBootstrapPhase::Done));
-        owned_node.shutdown();
+        owned_node.shutdown().unwrap();
     }
     #[test]
     #[serial(tor)]
     fn TorService_create_hidden_service() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
-            data_dir: String::from("/tmp/sifir_rs_sdk/"),
+            data_dir: String::from("/tmp/sifir_rs_sdk"),
+            bootstrap_timeout_ms: Some(45000),
         }
-        .into();
+        .try_into()
+        .unwrap();
         let client = utils::get_proxied_client(service.socks_port).unwrap();
-        let mut owned_node = service.into_owned_node();
+        let mut owned_node = service.into_owned_node().unwrap();
         let service_key = owned_node
             .create_hidden_service(TorHiddenServiceParam {
                 to_port: 20000,
@@ -416,6 +580,6 @@ mod tests {
             let resp = client.get(onion_url).send().await.unwrap();
             assert_eq!(resp.status(), 200);
         });
-        owned_node.shutdown();
+        owned_node.shutdown().unwrap();
     }
 }

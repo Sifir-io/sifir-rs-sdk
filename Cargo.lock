@@ -26,15 +26,15 @@ dependencies = [
 
 [[package]]
 name = "android_log-sys"
-version = "0.1.2"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b8052e2d8aabbb8d556d6abbcce2a22b9590996c5f849b9c7ce4544a2e3b984e"
+checksum = "85965b6739a430150bdd138e2374a98af0c3ee0d030b3bb7fc3bddff58d0102e"
 
 [[package]]
 name = "android_logger"
-version = "0.8.6"
+version = "0.9.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8cbd542dd180566fad88fd2729a53a62a734843c626638006a9d63ec0688484e"
+checksum = "2ec2333c185d826313162cee39d3fcc6a84ba08114a839bebf53b961e7e75773"
 dependencies = [
  "android_log-sys",
  "env_logger 0.7.1",
@@ -131,8 +131,8 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "bdk"
-version = "0.4.1-dev"
-source = "git+https://github.com/bitcoindevkit/bdk.git#5e352489a0ac9dd92002a73aa64789a9ae2f0794"
+version = "0.2.1-dev"
+source = "git+https://github.com/bitcoindevkit/bdk.git#6955a7776d6c4db1d0c872618ce06c4ef1a2749d"
 dependencies = [
  "async-trait",
  "bdk-macros",
@@ -146,14 +146,14 @@ dependencies = [
  "serde_json",
  "sled",
  "tiny-bip39",
- "tokio 1.2.0",
+ "tokio 0.2.24",
 ]
 
 [[package]]
 name = "bdk-macros"
-version = "0.3.0"
+version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b96757dbe9c7e0a8f0635c5366464d9c713528e111f47490e96385f70d6a67a6"
+checksum = "f62874901df222eb0fc3bad6e425bc2a935287b8110be0d1ad6d729af86cf6e1"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
@@ -168,9 +168,9 @@ checksum = "cdcf67bb7ba7797a081cd19009948ab533af7c355d5caf1d08c777582d351e9c"
 
 [[package]]
 name = "bitcoin"
-version = "0.26.0"
+version = "0.25.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ec5f88a446d66e7474a3b8fa2e348320b574463fb78d799d90ba68f79f48e0e"
+checksum = "aefc9be9f17185f4ebccae6575d342063f775924d57df0000edb1880c0fb7095"
 dependencies = [
  "bech32",
  "bitcoin_hashes",
@@ -227,11 +227,10 @@ dependencies = [
 name = "btc"
 version = "0.1.0"
 dependencies = [
- "anyhow",
  "bdk",
  "rand 0.8.2",
  "serde",
- "serde_json",
+ "tiny-bip39",
 ]
 
 [[package]]
@@ -533,9 +532,9 @@ checksum = "e78d4f1cc4ae33bbfc157ed5d5a5ef3bc29227303d595861deb238fcec4e9457"
 
 [[package]]
 name = "electrum-client"
-version = "0.6.0"
+version = "0.5.0-beta.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "21453800c95bb1aaa57490458c42d60c6277cb8a3e386030ec2381d5c2d4fa77"
+checksum = "aedfb48f66ab17ba3b2c69f8ff32f68d8b5dbc7839c0ca4e94237b835ca608dd"
 dependencies = [
  "bitcoin",
  "log",
@@ -1107,7 +1106,8 @@ checksum = "89203f3fba0a3795506acaad8ebce3c80c0af93f994d5a1d7a0b1eeb23271929"
 [[package]]
 name = "libtor"
 version = "44.7.0+0.4.4.7"
-source = "git+https://github.com/MagicalBitcoin/libtor.git?branch=update/tor-0.4.4.7#3f141acf05e7a62b180888ed46d9d187ec8210cb"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3c66f20f68896b4ae3abe6e29f9855111ecd44a89747eb88cd010a7de16a447f"
 dependencies = [
  "libtor-derive",
  "libtor-sys",
@@ -1128,7 +1128,8 @@ dependencies = [
 [[package]]
 name = "libtor-sys"
 version = "44.7.0+0.4.4.7"
-source = "git+https://github.com/MagicalBitcoin/libtor-sys.git?rev=e9959281ee6efb2abcb3629b77b18a5ceab3b5cc#e9959281ee6efb2abcb3629b77b18a5ceab3b5cc"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "382360648f3c3576b0ea3bc9728315d131b3421d420d56f2fbc87aac2f1fb7e1"
 dependencies = [
  "autotools",
  "cc",
@@ -1215,9 +1216,9 @@ dependencies = [
 
 [[package]]
 name = "miniscript"
-version = "5.1.0"
+version = "4.0.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "71f455be59a359d50370c4f587afbc5739c862e684c5afecae80ab93e7474b4e"
+checksum = "74ff4ece4ff5498718a232e92d53273903609c739052f5edf2a1a42c59586348"
 dependencies = [
  "bitcoin",
 ]
@@ -1739,9 +1740,9 @@ dependencies = [
 
 [[package]]
 name = "ring"
-version = "0.16.20"
+version = "0.16.19"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3053cf52e236a3ed746dfc745aa9cacf1b791d846bdaf412f60a8d7d6e17c8fc"
+checksum = "024a1e66fea74c66c66624ee5622a7ff0e4b73a13b4f5c326ddb50c708944226"
 dependencies = [
  "cc",
  "libc",
@@ -1829,9 +1830,9 @@ dependencies = [
 
 [[package]]
 name = "secp256k1"
-version = "0.20.1"
+version = "0.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "733b114f058f260c0af7591434eef4272ae1a8ec2751766d3cb89c6df8d5e450"
+checksum = "c6179428c22c73ac0fbb7b5579a56353ce78ba29759b3b8575183336ea74cdfb"
 dependencies = [
  "secp256k1-sys",
  "serde",
@@ -1839,9 +1840,9 @@ dependencies = [
 
 [[package]]
 name = "secp256k1-sys"
-version = "0.4.0"
+version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "67e4b6455ee49f5901c8985b88f98fb0a0e1d90a6661f5a03f4888bd987dad29"
+checksum = "11553d210db090930f4432bea123b31f70bbf693ace14504ea2a35e796c28dd2"
 dependencies = [
  "cc",
 ]
@@ -2230,18 +2231,18 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.23"
+version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "76cc616c6abf8c8928e2fdcc0dbfab37175edd8fb49a4641066ad1364fdab146"
+checksum = "e0f4a65597094d4483ddaed134f409b2cb7c1beccf25201a9f73c719254fa98e"
 dependencies = [
  "thiserror-impl",
 ]
 
 [[package]]
 name = "thiserror-impl"
-version = "1.0.23"
+version = "1.0.24"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9be73a2caec27583d0046ef3796c3794f868a5bc813db689eed00c7631275cd1"
+checksum = "7765189610d8241a44529806d6fd1f2e0a08734313a35d5b3a556f92b381f3c0"
 dependencies = [
  "proc-macro2 1.0.24",
  "quote 1.0.8",
@@ -2327,16 +2328,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tokio"
-version = "1.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e8190d04c665ea9e6b6a0dc45523ade572c088d2e6566244c1122671dbf4ae3a"
-dependencies = [
- "autocfg",
- "pin-project-lite 0.2.4",
-]
-
-[[package]]
 name = "tokio-socks"
 version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2394,6 +2385,7 @@ dependencies = [
  "serde",
  "serial_test",
  "socks",
+ "thiserror",
  "tokio 0.3.6",
  "torut",
  "utils",

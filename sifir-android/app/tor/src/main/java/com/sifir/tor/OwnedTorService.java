@@ -4,14 +4,14 @@ package com.sifir.tor;
 
 public final class OwnedTorService {
 
-    public OwnedTorService(TorServiceParam param) {
+    public OwnedTorService(TorServiceParam param) throws Exception {
         long a0 = param.mNativeObj;
         param.mNativeObj = 0;
 
         mNativeObj = init(a0);
         JNIReachabilityFence.reachabilityFence1(param);
     }
-    private static native long init(long param);
+    private static native long init(long param) throws Exception;
 
     public final int getSocksPort() {
         int ret = do_getSocksPort(mNativeObj);
@@ -20,10 +20,10 @@ public final class OwnedTorService {
     }
     private static native int do_getSocksPort(long self);
 
-    public final void shutdown() {
+    public final void shutdown() throws Exception {
         do_shutdown(mNativeObj);
     }
-    private static native void do_shutdown(long self);
+    private static native void do_shutdown(long self) throws Exception;
 
     public final String get_status() {
         String ret = do_get_status(mNativeObj);

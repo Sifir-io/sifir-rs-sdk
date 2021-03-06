@@ -22,6 +22,7 @@ pub struct BoxedResult<T> {
 pub extern "C" fn get_owned_TorService(
     data_dir: *const c_char,
     socks_port: u16,
+    bootstrap_timeout_ms: u64,
 ) -> *mut BoxedResult<OwnedTorService> {
     match catch_unwind(|| {
         assert!(!data_dir.is_null());
@@ -31,14 +32,15 @@ pub extern "C" fn get_owned_TorService(
             .to_owned();
 
         println!(
-            "Starting TorService with in data dir {} SocksPort {}",
-            dir_str, socks_port
+            "Starting TorService with in data dir '{}' SocksPort '{}' with bootstrap timeout '{}' ... ",
+            dir_str, socks_port,bootstrap_timeout_ms
         );
         let param = TorServiceParam {
             socks_port: Some(socks_port),
             data_dir: dir_str,
+            bootstrap_timeout_ms: Some(bootstrap_timeout_ms),
         };
-        OwnedTorService::new(param)
+        OwnedTorService::new(param).unwrap()
     }) {
         Ok(service) => Box::into_raw(Box::new(BoxedResult {
             result: Some(Box::new(service)),
@@ -59,23 +61,19 @@ pub extern "C" fn get_owned_TorService(
 #[no_mangle]
 ///# Safety
 /// Get the status of a OwnedTorService
-pub unsafe extern "C" fn get_status_of_owned_TorService(
+pub extern "C" fn get_status_of_owned_TorService(
     owned_client: *mut OwnedTorService,
 ) -> *mut c_char {
     assert!(!owned_client.is_null());
-    let owned = &mut *owned_client;
+    let owned = unsafe { &mut *owned_client };
     let node_status = owned.get_status();
     match node_status {
         Ok(status) => {
             let status_string = serde_json::to_string(&status).unwrap();
-            println!("status is {}", status_string);
             CString::new(status_string).unwrap().into_raw()
         }
         Err(e) => {
-            let message = match e.downcast::<String>() {
-                Ok(msg) => msg,
-                Err(_) => String::from("Unknown error"),
-            };
+            let message: String = format!("Error {:?}", e);
             CString::new(message).unwrap().into_raw()
         }
     }
@@ -83,7 +81,7 @@ pub unsafe extern "C" fn get_status_of_owned_TorService(
 #[no_mangle]
 ///# Safety
 /// Start a proxied TcpStream
-pub unsafe extern "C" fn tcp_stream_start(
+pub extern "C" fn tcp_stream_start(
     target: *const c_char,
     proxy: *const c_char,
     timeout_ms: u64,
@@ -140,13 +138,13 @@ impl DataObserver for Observer {
 #[no_mangle]
 ///# Safety
 /// Send a Message over a tcpStream
-pub unsafe extern "C" fn tcp_stream_on_data(
+pub extern "C" fn tcp_stream_on_data(
     stream: *mut TcpSocksStream,
     observer: Observer,
 ) -> *mut ResultMessage {
     match catch_unwind(|| {
         assert!(!stream.is_null());
-        let stream = &mut *stream;
+        let stream = unsafe { &mut *stream };
         stream.on_data(observer).unwrap()
     }) {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
@@ -164,7 +162,7 @@ pub unsafe extern "C" fn tcp_stream_on_data(
 #[no_mangle]
 ///# Safety
 /// Send a Message over a tcpStream
-pub unsafe extern "C" fn tcp_stream_send_msg(
+pub extern "C" fn tcp_stream_send_msg(
     stream: *mut TcpSocksStream,
     msg: *const c_char,
     timeout: u64,
@@ -172,7 +170,7 @@ pub unsafe extern "C" fn tcp_stream_send_msg(
     match catch_unwind(|| {
         assert!(!stream.is_null());
         assert!(!msg.is_null());
-        let stream = &mut *stream;
+        let stream = unsafe { &mut *stream };
         let msg_str: String = unsafe { CStr::from_ptr(msg) }
             .to_str()
             .expect("Could not get str from proxy")
@@ -218,5 +216,5 @@ pub unsafe extern "C" fn destroy_cstr(c_str: *mut c_char) {
 pub unsafe extern "C" fn shutdown_owned_TorService(owned_client: *mut OwnedTorService) {
     assert!(!owned_client.is_null());
     let mut owned: Box<OwnedTorService> = Box::from_raw(owned_client);
-    owned.shutdown();
+    let _ = owned.shutdown();
 }

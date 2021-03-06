@@ -4,20 +4,20 @@ package com.sifir.tor;
 
 public final class TcpSocksStream {
 
-    public TcpSocksStream(String target, String socks_proxy, long timeout_ms) {
+    public TcpSocksStream(String target, String socks_proxy, long timeout_ms) throws Exception {
         mNativeObj = init(target, socks_proxy, timeout_ms);
     }
-    private static native long init(String target, String socks_proxy, long timeout_ms);
+    private static native long init(String target, String socks_proxy, long timeout_ms) throws Exception;
 
     public final void on_data(DataObserver cb) {
         do_on_data(mNativeObj, cb);
     }
     private static native void do_on_data(long self, DataObserver cb);
 
-    public final void send_data(String msg, long timeout) {
+    public final void send_data(String msg, long timeout) throws Exception {
         do_send_data(mNativeObj, msg, timeout);
     }
-    private static native void do_send_data(long self, String msg, long timeout);
+    private static native void do_send_data(long self, String msg, long timeout) throws Exception;
 
     public synchronized void delete() {
         if (mNativeObj != 0) {

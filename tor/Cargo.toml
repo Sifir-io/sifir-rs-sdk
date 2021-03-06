@@ -8,16 +8,15 @@ edition = "2018"
 
 [dependencies]
 tokio = { version= "0.3", features = ["net","rt","process","rt-multi-thread","time"] }
-libtor = {git= "https://github.com/MagicalBitcoin/libtor.git", branch="update/tor-0.4.4.7", features=["vendored-openssl"]}
-#libtor = {version= "44.6.1+0.4.4.6", features=["vendored-openssl"]}
+libtor = { version= "44.7.0+0.4.4.7", features=["vendored-openssl"] }
 torut = { version = "0.1.7", features=["control","v3","vendored_openssl"] }
-#torut = { version = "0.1.6" , features=["vendored_openssl"] }
 anyhow = "1.0.33"
 serde = { version="1.0.117", features = ["derive"]}
 lazy_static = "1.4.0"
 futures = { version="0.3.8", default-features = false}
 socks = { version = "0.3.3"}
 base64 = "0.13.0"
+thiserror = "1.0.24"
 
 [dev-dependencies]
 serial_test = "*"
