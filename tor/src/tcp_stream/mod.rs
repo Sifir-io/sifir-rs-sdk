@@ -21,13 +21,13 @@ pub trait DataObserver {
 
 impl TcpSocksStream {
     /// Blocks indefinitely until connection established
-    pub fn new(target: String, socks_proxy: String) -> Self {
-        let socks_stream = Socks5Stream::connect(socks_proxy.as_str(), target.as_str()).unwrap();
-        TcpSocksStream {
+    pub fn new(target: String, socks_proxy: String) -> Result<Self,TorErrors> {
+        let socks_stream = Socks5Stream::connect(socks_proxy.as_str(), target.as_str())?;
+        Ok(TcpSocksStream {
             target,
             socks_proxy,
             stream: socks_stream,
-        }
+        })
     }
     /// New (connect) but with a timeout
     /// Blocks till connection established or timeout (in MS) expires
@@ -45,8 +45,8 @@ impl TcpSocksStream {
             .lock()
             .unwrap()
             .block_on(async move { timeout(Duration::from_millis(timeout_ms), socks_future).await })
-            .map_err(|e| TorErrors::BootStrapError(String::from("Tcp connection timedout")))?
-            .map_err(TorErrors::ThreadingError)
+            .map_err(|_| TorErrors::BootStrapError(String::from("Tcp connection timedout")))?
+            .map_err(TorErrors::ThreadingError)?
     }
     /// Spawns a new lsnr on the tcp stream that will call the passed callback with bufsize bytes of
     /// base64 encoded string of data as it is streamed through the socket
@@ -169,7 +169,7 @@ mod tests {
         let target = "kciybn4d4vuqvobdl2kdp3r2rudqbqvsymqwg4jomzft6m6gaibaf6yd.onion:50001";
         let msg = "{ \"id\": 1, \"method\": \"blockchain.scripthash.get_balance\", \"params\": [\"716decbe1660861c3d93906cb1d98ee68b154fd4d23aed9783859c1271b52a9c\"] }\n";
 
-        let mut tcp_com = TcpSocksStream::new(target.into(), "127.0.0.1:19054".into());
+        let mut tcp_com = TcpSocksStream::new(target.into(), "127.0.0.1:19054".into()).unwrap();
         struct Observer {
             pub count: Arc<Mutex<u16>>,
         }
@@ -197,7 +197,7 @@ mod tests {
         tcp_com.send_data(msg.into(), None).unwrap();
         tcp_com.send_data(msg.into(), None).unwrap();
         std::thread::sleep(std::time::Duration::from_secs(7));
-        tcp_com.shutdown();
+        tcp_com.shutdown().unwrap();
         let call_count: u16 = *count.lock().as_deref().unwrap();
         assert_eq!(call_count, 3);
         tcp_com

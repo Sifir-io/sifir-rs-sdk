@@ -28,24 +28,17 @@ foreign_class!(class OwnedTorService {
     fn getSocksPort(&self)-> u16{
         this.socks_port
     }
-    fn shutdown(&mut self){
-        this.shutdown().unwrap();
+    fn shutdown(&mut self)->Result<(),String>{
+        this.shutdown().map_err(|e| { format!("{:#?}",e) })
     }
-    fn get_status(&mut self)-> String{
+    fn get_status(&mut self)-> String {
         let node_status = this.get_status();
         match node_status {
             Ok(status) => {
                 let status_string = serde_json::to_string(&status).unwrap();
                 status_string
             }
-            Err(e) => {
-                let message = e.to_string();
-                //let message = match e.downcast::<String>() {
-                //    Ok(msg) => msg,
-                //    Err(_) => String::from("Unknown error"),
-                //};
-                message
-            }
+            Err(e) => { e.to_string() }
        }
     }
 });
@@ -76,18 +69,14 @@ impl DataObserver for Observer {
 foreign_class!(class TcpSocksStream {
     self_type TcpSocksStream;
     constructor new(target:String,socks_proxy:String,timeout_ms:u64)->Result<TcpSocksStream,String> {
-      TcpSocksStream::new_timeout(target,socks_proxy,timeout_ms).map_err(|e| {
-                                                        format!("{:#?}",e)
-    })
-
+      TcpSocksStream::new_timeout(target,socks_proxy,timeout_ms).map_err(|e| { format!("{:#?}",e) })
     }
     fn on_data(&self,cb:Box<dyn DataObserver>){
       this.on_data(Observer{
        cb,
       }).unwrap();
     }
-    fn send_data(&mut self, msg:String,timeout:u64){
-        this.send_data(msg, Some(Duration::new(timeout, 0))).unwrap();
-        // this.send_data(msg).unwrap();
+    fn send_data(&mut self, msg:String,timeout:u64)->Result<(),String>{
+        this.send_data(msg, Some(Duration::new(timeout, 0))).map_err(|e| { format!("{:#?}",e) })
     }
 });
