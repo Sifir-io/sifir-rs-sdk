@@ -11,6 +11,7 @@ fn main() {
     let service: TorService = TorServiceParam {
         socks_port: Some(socks_port),
         data_dir: String::from("/tmp/sifir_rs_sdk/"),
+        bootstrap_timeout_ms: Some(45000),
     }
     .try_into()
     .unwrap();
