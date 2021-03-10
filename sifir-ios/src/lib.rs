@@ -1,4 +1,7 @@
-pub mod tor_ffi;
+mod util;
+
+#[cfg(feature = "tor_daemon")]
+mod tor_ffi;
 
 #[cfg(feature = "btc_wallet")]
-pub mod btc_ffi;
+mod btc_ffi;

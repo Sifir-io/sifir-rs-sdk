@@ -6,9 +6,10 @@ edition = "2018"
 
 [features]
 btc_wallet =["btc"]
+tor_daemon =["tor"]
 
 [dependencies]
-tor = { path = "../tor" }
+tor = { path = "../tor", optional = true }
 btc= { path = "../btc", optional = true  }
 libc = "0.2.80"
 serde = { version="1.0.117", features = ["derive"]}

@@ -1,3 +1,4 @@
+use crate::util::*;
 use libc::{c_char, c_void};
 use std::ffi::{CStr, CString};
 use std::panic::catch_unwind;
@@ -6,17 +7,6 @@ use tor::{
     tcp_stream::{DataObserver, TcpSocksStream},
     OwnedTorService, TorServiceParam,
 };
-
-#[repr(C)]
-pub enum ResultMessage {
-    Success,
-    Error(*mut c_char),
-}
-#[repr(C)]
-pub struct BoxedResult<T> {
-    pub result: Option<Box<T>>,
-    pub message: ResultMessage,
-}
 
 #[no_mangle]
 pub extern "C" fn get_owned_TorService(
@@ -191,7 +181,6 @@ pub extern "C" fn tcp_stream_send_msg(
         }
     }
 }
-// FIXME here on_data interface
 
 #[no_mangle]
 ///# Safety

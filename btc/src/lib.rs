@@ -1,19 +1,17 @@
-use anyhow::Result;
 use bdk::bitcoin::consensus::encode::{deserialize, serialize, serialize_hex};
 use bdk::bitcoin::hashes::hex::FromHex;
 use bdk::bitcoin::secp256k1::Secp256k1;
 use bdk::bitcoin::util::bip32::ExtendedPubKey;
-use bdk::bitcoin::util::bip32::{
+pub use bdk::bitcoin::util::bip32::{
     ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, Fingerprint,
     IntoDerivationPath,
 };
 use bdk::bitcoin::util::psbt::PartiallySignedTransaction;
 pub use bdk::bitcoin::{secp256k1, PrivateKey};
-use bdk::bitcoin::{Address, Network, OutPoint, Script, Txid};
+pub use bdk::bitcoin::{Address, Network, OutPoint, Script, Txid};
 use bdk::blockchain::ElectrumBlockchain;
 use bdk::blockchain::{log_progress, Blockchain};
 use bdk::blockchain::{Progress, ProgressData};
-use bdk::database::BatchDatabase;
 use bdk::database::MemoryDatabase;
 use bdk::descriptor::IntoWalletDescriptor;
 use bdk::electrum_client::Client;
@@ -22,12 +20,13 @@ use bdk::keys::DescriptorKey;
 use bdk::keys::{DerivableKey, ExtendedKey, GeneratableKey, GeneratedKey};
 use bdk::keys::{KeyError, ScriptContext};
 use bdk::miniscript::miniscript;
-use bdk::Error;
 use bdk::{FeeRate, KeychainKind, Wallet};
 
 use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
 use serde_json;
+
+use thiserror::Error;
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct WalletDescriptors {
@@ -43,7 +42,38 @@ pub struct WalletCfg {
     address_look_ahead: u32,
 }
 
-type ElectrumMemoryWallet = Wallet<ElectrumBlockchain, MemoryDatabase>;
+#[repr(C)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct XprvsWithPaths(ExtendedPrivKey, DerivationPath, Fingerprint);
+
+#[repr(C)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DerivedBip39Xprvs {
+    phrase: String,
+    master_xprv: ExtendedPrivKey,
+    xprv_w_paths: Vec<XprvsWithPaths>,
+}
+
+#[derive(Error, Debug)]
+pub enum BtcErrors {
+    #[error("General BDK:")]
+    BdkError(#[from] bdk::Error),
+    #[error("BDK Key Error:")]
+    BdkKeyError(#[from] bdk::keys::KeyError),
+    #[error("Bip32 error:")]
+    Bip32Error(#[from] Bip32Error),
+    #[error("Io Error:")]
+    IoError(#[from] std::io::Error),
+    #[error("Descriptor Error:")]
+    DescriptorError(#[from] bdk::descriptor::error::Error),
+    #[error("Expected value missing for {:?}",.0)]
+    EmptyOption(String),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+// TODO Persistance ? Here or RN side ?
+pub type ElectrumMemoryWallet = Wallet<ElectrumBlockchain, MemoryDatabase>;
 
 impl From<WalletCfg> for ElectrumMemoryWallet {
     fn from(cfg: WalletCfg) -> ElectrumMemoryWallet {
@@ -67,14 +97,6 @@ impl From<WalletCfg> for ElectrumMemoryWallet {
         )
         .unwrap()
     }
-}
-
-#[repr(C)]
-#[derive(Debug)]
-pub struct DerivedBip39Xprvs {
-    phrase: String,
-    master_fingerprint: String,
-    xprv_w_paths: Vec<(ExtendedPrivKey, DerivationPath)>,
 }
 ///
 /// Generate a new Bip39 mnemonic seed
@@ -100,63 +122,62 @@ impl DerivedBip39Xprvs {
         num_child: usize,
         password: Option<String>,
         seed_phrase: Option<String>,
-    ) -> Result<Self> {
+    ) -> Result<Self, BtcErrors> {
         let secp = secp256k1::Secp256k1::new();
         let (master_key, mnemonic_gen): (ExtendedKey<miniscript::BareCtx>, Mnemonic) =
             match seed_phrase {
                 Some(phrase) => {
-                    let mnemonic = Mnemonic::from_phrase(&phrase, Language::English).unwrap();
-                    (mnemonic.clone().into_extended_key().unwrap(), mnemonic)
+                    let mnemonic = Mnemonic::from_phrase(&phrase, Language::English)?;
+                    (mnemonic.clone().into_extended_key()?, mnemonic)
                 }
                 None => {
                     let mnemonic: GeneratedKey<_, miniscript::BareCtx> =
                         Mnemonic::generate((MnemonicType::Words24, Language::English)).unwrap();
                     let mnemonic = mnemonic.into_key();
-                    (
-                        (mnemonic.clone(), password).into_extended_key().unwrap(),
-                        mnemonic,
-                    )
+                    ((mnemonic.clone(), password).into_extended_key()?, mnemonic)
                 }
             };
 
-        // FIXME propgration
-        let xprv_master = master_key.into_xprv(network).unwrap();
-        // derive n childs int/ext <derive_base>/n'
-        let xprv_w_paths = derive_base
+        let xprv_master = master_key
+            .into_xprv(network)
+            .ok_or(BtcErrors::EmptyOption("xprv_master was empty".into()))?;
+        // derive n childs int/ext <derive_base>/n' and cast from Vec<Result> - Result<Vec>
+        let xprv_w_paths: Result<Vec<XprvsWithPaths>, BtcErrors> = derive_base
             .normal_children()
-            .map(|child_path| {
-                (
-                    // Path is relative to key, so here derive from master
-                    xprv_master.derive_priv(&secp, &child_path).unwrap(),
+            .map(|child_path| -> Result<XprvsWithPaths, BtcErrors> {
+                // Path is relative to key, so here derive from master
+                let extended_priv = xprv_master.derive_priv(&secp, &child_path)?;
+                Ok(XprvsWithPaths(
+                    extended_priv,
                     child_path,
-                )
+                    xprv_master.fingerprint(&secp),
+                ))
             })
             .take(num_child)
-            .collect::<Vec<(ExtendedPrivKey, DerivationPath)>>();
+            .collect();
 
-        // FIXME here do we send back masterfingerprint or make it part of tuple ?
         Ok(DerivedBip39Xprvs {
-            master_fingerprint: format!("{:x?}", xprv_master.fingerprint(&secp)),
+            master_xprv: xprv_master,
             phrase: mnemonic_gen.into_phrase(),
-            xprv_w_paths,
+            xprv_w_paths: xprv_w_paths?,
         })
     }
 }
 
-impl From<(Vec<(ExtendedPrivKey, DerivationPath)>, Network)> for WalletDescriptors {
-    fn from((keys, network): (Vec<(ExtendedPrivKey, DerivationPath)>, Network)) -> Self {
+impl From<(Vec<XprvsWithPaths>, Network)> for WalletDescriptors {
+    fn from((keys, network): (Vec<XprvsWithPaths>, Network)) -> Self {
         let mut descriptors = keys
             .iter()
-            .map(|(key, path)| {
+            .map(|XprvsWithPaths(key, path, master_fp)| {
                 let descriptor_key = key
-                    .into_descriptor_key(Some((key.parent_fingerprint, path.clone())), path.clone())
+                    .into_descriptor_key(Some((*master_fp, path.clone())), path.clone())
                     .unwrap();
-                // FIXME define the type of descriptor
+                // TODO define the type of descriptor
                 bdk::descriptor!(wpkh((descriptor_key))).unwrap()
             })
             .take(2);
 
-        let (external_desc, ext_keymap, valid_network) = descriptors.next().unwrap();
+        let (external_desc, ext_keymap, _) = descriptors.next().unwrap();
         let (internal_desc, int_keymap, _) = descriptors.next().unwrap();
 
         WalletDescriptors {
@@ -184,29 +205,37 @@ pub fn generate_wif(network: Network) -> String {
     .to_wif()
 }
 
+/// @deprecated Before BDK had descriptor macros
+/// Kept for test purposes
 pub fn generate_pkh_descriptors(
     network: Network,
     key: Option<ExtendedPrivKey>,
-) -> Result<WalletDescriptors, bdk::descriptor::error::Error> {
-    let extended_priv_key = match (key) {
+) -> Result<WalletDescriptors, BtcErrors> {
+    let extended_priv_key = match key {
         Some(key) => key,
-        None => generate_extended_priv_key(network)?,
+        None => generate_extended_priv_key(network).unwrap(),
     };
     //  m/0
-    let wallet = extended_priv_key.ckd_priv(
-        &secp256k1::Secp256k1::new(),
-        ChildNumber::Hardened { index: 0 },
-    )?;
+    let wallet = extended_priv_key
+        .ckd_priv(
+            &secp256k1::Secp256k1::new(),
+            ChildNumber::Hardened { index: 0 },
+        )
+        .unwrap();
     // m/0'/0'
-    let wallet_chain_int = wallet.ckd_priv(
-        &secp256k1::Secp256k1::new(),
-        ChildNumber::Hardened { index: 1 },
-    )?;
+    let wallet_chain_int = wallet
+        .ckd_priv(
+            &secp256k1::Secp256k1::new(),
+            ChildNumber::Hardened { index: 1 },
+        )
+        .unwrap();
     // m/0'/1'
-    let wallet_chain_ext = wallet.ckd_priv(
-        &secp256k1::Secp256k1::new(),
-        ChildNumber::Hardened { index: 0 },
-    )?;
+    let wallet_chain_ext = wallet
+        .ckd_priv(
+            &secp256k1::Secp256k1::new(),
+            ChildNumber::Hardened { index: 0 },
+        )
+        .unwrap();
 
     let wallet_chain_ext_pubkey =
         ExtendedPubKey::from_private(&secp256k1::Secp256k1::new(), &wallet_chain_ext);
@@ -376,7 +405,7 @@ mod tests {
         .unwrap();
 
         let descriptors: WalletDescriptors = (wallet_xprvs.xprv_w_paths, network).into();
-        println!("Descr {:#?}", descriptors);
+        println!("Descr {:#?}", serde_json::to_string(&descriptors));
         let wallet_cfg = WalletCfg {
             name: String::from("my test"),
             descriptors,
@@ -388,6 +417,7 @@ mod tests {
     }
 
     #[test]
+    #[ignore]
     fn can_sync_wallet_and_sign_utxos() {
         let rcvr_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8e5FKc3Mdn1ByJgZ2GBBA4DFZ2tAzmtquHHPhRtRFmq1M8a3je1DXhRu2Dnx6db3GKmavKbku5sdkcAzWBHwi1KVoNMi4V3oox4vfrvuyNs/0\'/0/*)\",\"internal\":\"wpkh([547f0cd3/0\'/1]tprv8e5FKc3Mdn1C3eHRQ4pBZR13wHTHpX1umHgPpQv9HDjA5MRUKmRQqjWic6gfSAp6CDyM8B3ur3jkayG7E8yG5eNj3ZcCEJnuaKa14Q9Tf9W/0\'/1/*)#63l9gmuk\",\"public\":\"wpkh([547f0cd3/0\'/0/0\']tpubDCYJ5ZRDkRcFtTQZzetaWVS6q52rs3RTAKXYMWEvGCR6Nb1LTFpdwGohYQ4f98aVE6NxYN3tru8kziP9vZhDYZYDd5VDERyFr8U5WeCbGHy/0/*)#knhduycc\"},\"address_look_ahead\":2}").unwrap();
         let sender_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test_2\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8dWQe989ftsPNn9NddyKVri3GHs4voe2E4xS75oX9neHeQGCnbn2ru3o1mbxmW2SnNRtpMdaopc6GWftoGMyhKPX3zjCBTKU1Ckw6E6NmQL/0\'/0/*)\",\"internal\":\"wpkh([0776ff86/0\'/1]tprv8dWQe989ftsPRPriFR6w1cG3R2s5FBxXsDscygXe8RiaUQrRkA7J8FFJwTPRBoLia7fqVB8s87SQ5rLnVjbZfDpuorRkBBqrSHKVbhUMYmq/0\'/1/*)#ynv3pma4\",\"public\":\"wpkh([0776ff86/0\'/0/0\']tpubDCmXi7Tx4hixdHtw4WVgnSAsDJ4Q8oR3NSq6DYRmCC46hihokPaHo3RAdaSQza8sWtAU63zt5VgkgYt6tUmZQWqVZio5vptzgrNMmrRwcBF/0/*)#cn8qlh6k\"},\"address_look_ahead\":2}").unwrap();
@@ -408,7 +438,7 @@ mod tests {
             }
         }
         impl Progress for SifirWallet {
-            fn update(&self, progress: f32, message: Option<String>) -> Result<(), Error> {
+            fn update(&self, progress: f32, message: Option<String>) -> Result<(), bdk::Error> {
                 println!("progress is {} and message {:?}", progress, message);
                 Ok(())
             }
