@@ -40,7 +40,7 @@ pub extern "C" fn derive_xprvs(
     password: *const c_char,
     seed_phrase: *const c_char,
     num_child: usize,
-) -> *mut BoxedResult<String> {
+) -> *mut BoxedResult<*mut c_char> {
     unwind_into_boxed_result!({
         assert!(!network.is_null());
         assert!(!derive_path.is_null());
@@ -63,6 +63,7 @@ pub extern "C" fn derive_xprvs(
         let network = match network_str {
             "testnet" => Ok(Network::Testnet),
             "mainnet" => Ok(Network::Bitcoin),
+            "bitcoin" => Ok(Network::Bitcoin),
             _ => Err("Invalid network passed"),
         }
         .unwrap();
@@ -84,7 +85,8 @@ pub extern "C" fn derive_xprvs(
         )
         .unwrap();
 
-        serde_json::to_string(&wallet_desc).unwrap()
+        let json = serde_json::to_string(&wallet_desc).unwrap();
+        CString::new(json).unwrap().into_raw()
     })
 }
 
@@ -92,19 +94,21 @@ pub extern "C" fn derive_xprvs(
 pub extern "C" fn descriptors_from_xprvs_wpaths_vec(
     vec_xprvs_with_paths_json: *const c_char,
     network: *const c_char,
-) -> *mut BoxedResult<String> {
+) -> *mut BoxedResult<*mut c_char> {
     unwind_into_boxed_result!({
         let xprvspaths_str = required_str_from_cchar_ptr!(vec_xprvs_with_paths_json);
         let network_str = required_str_from_cchar_ptr!(network);
         let network = match network_str {
             "testnet" => Ok(Network::Testnet),
             "mainnet" => Ok(Network::Bitcoin),
+            "bitcoin" => Ok(Network::Bitcoin),
             _ => Err("Invalid network passed"),
         }
         .unwrap();
         let x_prvs_with_path: Vec<XprvsWithPaths> = serde_json::from_str(xprvspaths_str).unwrap();
         let wallet_descriptors: WalletDescriptors = (x_prvs_with_path, network).into();
-        serde_json::to_string(&wallet_descriptors).unwrap()
+        let json = serde_json::to_string(&wallet_descriptors).unwrap();
+        CString::new(json).unwrap().into_raw()
     })
 }
 
@@ -120,4 +124,12 @@ pub extern "C" fn electrum_wallet_from_wallet_cfg(
         let wallet: ElectrumMemoryWallet = wallet_cfg.into();
         wallet
     })
+}
+
+#[no_mangle]
+///# Safety
+/// Destroy a cstr
+pub unsafe extern "C" fn destroy_cstr(c_str: *mut c_char) {
+    assert!(!c_str.is_null());
+    let _ = Box::from_raw(c_str);
 }
