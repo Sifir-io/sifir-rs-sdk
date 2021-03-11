@@ -1,27 +1,20 @@
 use bdk::bitcoin::consensus::encode::{deserialize, serialize, serialize_hex};
-use bdk::bitcoin::hashes::hex::FromHex;
-use bdk::bitcoin::secp256k1::Secp256k1;
-use bdk::bitcoin::util::bip32::ExtendedPubKey;
 pub use bdk::bitcoin::util::bip32::{
-    ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, Fingerprint,
+    ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, ExtendedPubKey, Fingerprint,
     IntoDerivationPath,
 };
-use bdk::bitcoin::util::psbt::PartiallySignedTransaction;
-pub use bdk::bitcoin::{secp256k1, PrivateKey};
-pub use bdk::bitcoin::{Address, Network, OutPoint, Script, Txid};
-use bdk::blockchain::ElectrumBlockchain;
-use bdk::blockchain::{log_progress, Blockchain};
-use bdk::blockchain::{Progress, ProgressData};
+pub use bdk::bitcoin::{secp256k1, Address, Network, OutPoint, PrivateKey, Script, Txid};
+use bdk::blockchain::{log_progress, Blockchain, ElectrumBlockchain, Progress, ProgressData};
 use bdk::database::MemoryDatabase;
 use bdk::descriptor::IntoWalletDescriptor;
 use bdk::electrum_client::Client;
 use bdk::keys::bip39::{Language, Mnemonic, MnemonicType};
-use bdk::keys::DescriptorKey;
-use bdk::keys::{DerivableKey, ExtendedKey, GeneratableKey, GeneratedKey};
-use bdk::keys::{KeyError, ScriptContext};
+use bdk::keys::{
+    DerivableKey, DescriptorKey, ExtendedKey, GeneratableKey, GeneratedKey, KeyError, ScriptContext,
+};
 use bdk::miniscript::miniscript;
+use bdk::sled;
 use bdk::{FeeRate, KeychainKind, Wallet};
-
 use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
 use serde_json;
@@ -40,6 +33,7 @@ pub struct WalletCfg {
     name: String,
     descriptors: WalletDescriptors,
     address_look_ahead: u32,
+    db_path: Option<String>,
 }
 
 #[repr(C)]
@@ -72,8 +66,8 @@ pub enum BtcErrors {
     Other(#[from] anyhow::Error),
 }
 
-// TODO Persistance ? Here or RN side ?
 pub type ElectrumMemoryWallet = Wallet<ElectrumBlockchain, MemoryDatabase>;
+pub type ElectrumSledWallet = Wallet<ElectrumBlockchain, sled::Tree>;
 
 impl From<WalletCfg> for ElectrumMemoryWallet {
     fn from(cfg: WalletCfg) -> ElectrumMemoryWallet {
@@ -98,6 +92,33 @@ impl From<WalletCfg> for ElectrumMemoryWallet {
         .unwrap()
     }
 }
+
+impl From<WalletCfg> for ElectrumSledWallet {
+    fn from(cfg: WalletCfg) -> ElectrumSledWallet {
+        let secp = &secp256k1::Secp256k1::new();
+        let db = sled::open(cfg.db_path.expect("Missing db path")).unwrap();
+        let tree = db.open_tree(cfg.name).unwrap();
+        Wallet::new(
+            cfg.descriptors
+                .external
+                .as_str()
+                .into_wallet_descriptor(&secp, cfg.descriptors.network)
+                .unwrap(),
+            Some(
+                cfg.descriptors
+                    .internal
+                    .as_str()
+                    .into_wallet_descriptor(&secp, cfg.descriptors.network)
+                    .unwrap(),
+            ),
+            cfg.descriptors.network,
+            tree,
+            ElectrumBlockchain::from(Client::new("ssl://electrum.blockstream.info:60002").unwrap()),
+        )
+        .unwrap()
+    }
+}
+
 ///
 /// Generate a new Bip39 mnemonic seed
 /// Derive num_child from provided derive_base
@@ -309,6 +330,7 @@ mod tests {
             name: String::from("my test"),
             descriptors: desc,
             address_look_ahead: 2,
+            db_path: None,
         }
         .into();
         let address = wallet.get_new_address().unwrap().address_type().unwrap();
@@ -332,6 +354,7 @@ mod tests {
             name: String::from("my test"),
             descriptors: desc,
             address_look_ahead: 2,
+            db_path: None,
         }
         .into();
         let address = wallet.get_new_address().unwrap();
@@ -410,6 +433,7 @@ mod tests {
             name: String::from("my test"),
             descriptors,
             address_look_ahead: 2,
+            db_path: None,
         };
         let wallet: ElectrumMemoryWallet = wallet_cfg.into();
         let address = wallet.get_new_address().unwrap();
