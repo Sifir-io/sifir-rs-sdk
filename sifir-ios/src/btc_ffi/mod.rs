@@ -117,11 +117,11 @@ pub extern "C" fn descriptors_from_xprvs_wpaths_vec(
 #[no_mangle]
 pub extern "C" fn electrum_wallet_from_wallet_cfg(
     wallet_cfg_json: *const c_char,
-) -> *mut BoxedResult<ElectrumMemoryWallet> {
+) -> *mut BoxedResult<ElectrumSledWallet> {
     unwind_into_boxed_result!({
         let wallet_cfg_str = required_str_from_cchar_ptr!(wallet_cfg_json);
         let wallet_cfg: WalletCfg = serde_json::from_str(wallet_cfg_str).unwrap();
-        let wallet: ElectrumMemoryWallet = wallet_cfg.into();
+        let wallet: ElectrumSledWallet = wallet_cfg.into();
         wallet
     })
 }
