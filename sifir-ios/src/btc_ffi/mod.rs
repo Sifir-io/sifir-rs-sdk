@@ -1,8 +1,9 @@
 use crate::util::*;
 use btc::*;
 use libc::{c_char, c_void};
+use std::borrow::Borrow;
 use std::ffi::{CStr, CString};
-use std::panic::catch_unwind;
+use std::panic::{catch_unwind, AssertUnwindSafe};
 
 macro_rules! unwind_into_boxed_result {
     ($e:expr) => {
@@ -112,8 +113,6 @@ pub extern "C" fn descriptors_from_xprvs_wpaths_vec(
     })
 }
 
-// FIXME HERE
-// 1. how to persist and TEST !
 #[no_mangle]
 pub extern "C" fn electrum_wallet_from_wallet_cfg(
     wallet_cfg_json: *const c_char,
@@ -127,9 +126,67 @@ pub extern "C" fn electrum_wallet_from_wallet_cfg(
 }
 
 #[no_mangle]
+pub extern "C" fn get_wallet_balance(
+    electrumWallet: *mut ElectrumSledWallet,
+) -> *mut BoxedResult<u64> {
+    let wallet = unsafe { &mut *electrumWallet };
+    let matcher = AssertUnwindSafe(wallet);
+    unwind_into_boxed_result!({ matcher.get_balance().unwrap() })
+}
+
+#[no_mangle]
+pub extern "C" fn get_wallet_new_address(
+    electrumWallet: *mut ElectrumSledWallet,
+) -> *mut BoxedResult<*mut c_char> {
+    let wallet = unsafe { &mut *electrumWallet };
+    let matcher = AssertUnwindSafe(wallet);
+    unwind_into_boxed_result!({
+        let address = matcher.get_new_address().unwrap();
+        let json = serde_json::to_string(&address).unwrap();
+        CString::new(json).unwrap().into_raw()
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn sync_wallet(electrumWallet: *mut ElectrumSledWallet) -> *mut BoxedResult<bool> {
+    let wallet = unsafe { &mut *electrumWallet };
+    let matcher = AssertUnwindSafe(wallet);
+    unwind_into_boxed_result!({
+        // FIXME HERE make this aaysn
+        let _ = matcher.sync().unwrap();
+        true
+    })
+}
+
+/// Generates a finalized txn from CreateTxn json
+/// return {paritaly signed PSBT}:{txn Details} both encodede as JSON
+/// FIXME should just return a json wth both fields
+pub extern "C" fn create_tx(
+    wallet: *mut ElectrumSledWallet,
+    tx: *const c_char,
+) -> *mut BoxedResult<*mut c_char> {
+    let wallet = unsafe { &mut *wallet };
+    let matcher = AssertUnwindSafe(wallet);
+    unwind_into_boxed_result!({
+        let txn_str = required_str_from_cchar_ptr!(tx);
+        let create_txn: CreateTx = serde_json::from_str(txn_str).unwrap();
+        let (pp, txn) = create_tx_to_wallet_txn(&matcher, create_txn).unwrap();
+        let ps_psbt = serde_json::to_string(&pp).unwrap();
+        let txn_details = serde_json::to_string(&txn).unwrap();
+        CString::new(format!("{}:{}", ps_psbt, txn_details))
+            .unwrap()
+            .into_raw()
+    })
+}
+#[no_mangle]
 ///# Safety
 /// Destroy a cstr
 pub unsafe extern "C" fn destroy_cstr(c_str: *mut c_char) {
     assert!(!c_str.is_null());
     let _ = Box::from_raw(c_str);
+}
+
+pub unsafe extern "C" fn drop_wallet(wallet: *mut ElectrumSledWallet) {
+    assert!(!wallet.is_null());
+    let _: Box<ElectrumSledWallet> = Box::from_raw(wallet);
 }

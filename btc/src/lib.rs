@@ -1,11 +1,14 @@
-use bdk::bitcoin::consensus::encode::{deserialize, serialize, serialize_hex};
+use bdk::bitcoin::consensus::encode::{
+    deserialize, serialize, serialize_hex, Error as BitcoinError,
+};
+use bdk::bitcoin::util::address::Error as BitcoinAddressError;
 pub use bdk::bitcoin::util::bip32::{
     ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, ExtendedPubKey, Fingerprint,
     IntoDerivationPath,
 };
 pub use bdk::bitcoin::{secp256k1, Address, Network, OutPoint, PrivateKey, Script, Txid};
 use bdk::blockchain::{log_progress, Blockchain, ElectrumBlockchain, Progress, ProgressData};
-use bdk::database::MemoryDatabase;
+use bdk::database::{BatchDatabase, MemoryDatabase};
 use bdk::descriptor::IntoWalletDescriptor;
 use bdk::electrum_client::Client;
 use bdk::keys::bip39::{Language, Mnemonic, MnemonicType};
@@ -13,12 +16,12 @@ use bdk::keys::{
     DerivableKey, DescriptorKey, ExtendedKey, GeneratableKey, GeneratedKey, KeyError, ScriptContext,
 };
 use bdk::miniscript::miniscript;
-use bdk::sled;
-use bdk::{FeeRate, KeychainKind, Wallet};
+pub use bdk::{sled, FeeRate, TxBuilder, Wallet};
 use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
+use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -60,12 +63,79 @@ pub enum BtcErrors {
     IoError(#[from] std::io::Error),
     #[error("Descriptor Error:")]
     DescriptorError(#[from] bdk::descriptor::error::Error),
+    #[error("BitcoinError Error:")]
+    BitcoinError(#[from] BitcoinError),
+    #[error("Bitcoin Address Error Error:")]
+    BitcoinAddressError(#[from] BitcoinAddressError),
     #[error("Expected value missing for {:?}",.0)]
     EmptyOption(String),
     #[error(transparent)]
     Other(#[from] anyhow::Error),
 }
 
+#[derive(Debug, Serialize, Deserialize)]
+enum FeeType {
+    Abs,
+    Rate,
+}
+#[derive(Debug, Serialize, Deserialize)]
+enum SpendChangePolicy {
+    Yes,
+    No,
+    OnlyChange,
+}
+
+/// Txn paramteres Easy to serialize into JSON and send across FFI
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateTx {
+    recipients: Vec<(String, u64)>,
+    fee_type: FeeType,
+    fee: f32,
+    spend_change: SpendChangePolicy,
+    enable_rbf: bool,
+}
+
+/// Converts a CreateTx struct into a BDK TxnBuilder and finalizes it
+pub fn create_tx_to_wallet_txn<B: Blockchain, D: BatchDatabase>(
+    wallet: &Wallet<B, D>,
+    tx: CreateTx,
+) -> Result<
+    (
+        bdk::bitcoin::util::psbt::PartiallySignedTransaction,
+        bdk::TransactionDetails,
+    ),
+    BtcErrors,
+> {
+    let mut txn = wallet.build_tx();
+    // strings to addresses
+    let rcpts: Result<Vec<(Script, u64)>, BtcErrors> = tx
+        .recipients
+        .into_iter()
+        .map(|(addr, amount)| {
+            let address = Address::from_str(addr.as_str())?.script_pubkey();
+            Ok((address, amount))
+        })
+        .collect();
+
+    txn.set_recipients(rcpts?);
+    match tx.fee_type {
+        FeeType::Abs => txn.fee_absolute(tx.fee as u64),
+        FeeType::Rate => txn.fee_rate(FeeRate::from_sat_per_vb(tx.fee)),
+    };
+
+    match tx.spend_change {
+        SpendChangePolicy::No => {
+            txn.do_not_spend_change();
+        }
+        SpendChangePolicy::OnlyChange => {
+            txn.only_spend_change();
+        }
+        _ => (),
+    };
+
+    txn.enable_rbf();
+    txn.finish().map_err(|err| BtcErrors::BdkError(err))
+}
 pub type ElectrumMemoryWallet = Wallet<ElectrumBlockchain, MemoryDatabase>;
 pub type ElectrumSledWallet = Wallet<ElectrumBlockchain, sled::Tree>;
 
@@ -439,7 +509,59 @@ mod tests {
         let address = wallet.get_new_address().unwrap();
         assert_eq!(format!("{}", address.address_type().unwrap()), "p2wpkh");
     }
+    #[test]
+    fn electrum_sled() {
+        let num_child = 2;
+        // segwit/coin/account
+        let derive_base = "m/44'/0'/0'";
+        let network = Network::Testnet;
+        let wallet_xprvs = DerivedBip39Xprvs::new(
+            derive_base.into_derivation_path().unwrap(),
+            network,
+            2,
+            Some(String::from("mypass")),
+            None,
+        )
+        .unwrap();
 
+        let descriptors: WalletDescriptors = (wallet_xprvs.xprv_w_paths, network).into();
+        let wallet_cfg = WalletCfg {
+            name: String::from("mytest2"),
+            descriptors,
+            address_look_ahead: 2,
+            db_path: Some(String::from("/tmp/sifir-bdk")),
+        };
+        let wallet: ElectrumSledWallet = wallet_cfg.into();
+        let address = wallet.get_new_address().unwrap();
+        assert_eq!(format!("{}", address.address_type().unwrap()), "p2wpkh");
+    }
+
+    #[test]
+    fn txn_from_create_txn_json() {
+        let rcvr_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8e5FKc3Mdn1ByJgZ2GBBA4DFZ2tAzmtquHHPhRtRFmq1M8a3je1DXhRu2Dnx6db3GKmavKbku5sdkcAzWBHwi1KVoNMi4V3oox4vfrvuyNs/0\'/0/*)\",\"internal\":\"wpkh([547f0cd3/0\'/1]tprv8e5FKc3Mdn1C3eHRQ4pBZR13wHTHpX1umHgPpQv9HDjA5MRUKmRQqjWic6gfSAp6CDyM8B3ur3jkayG7E8yG5eNj3ZcCEJnuaKa14Q9Tf9W/0\'/1/*)#63l9gmuk\",\"public\":\"wpkh([547f0cd3/0\'/0/0\']tpubDCYJ5ZRDkRcFtTQZzetaWVS6q52rs3RTAKXYMWEvGCR6Nb1LTFpdwGohYQ4f98aVE6NxYN3tru8kziP9vZhDYZYDd5VDERyFr8U5WeCbGHy/0/*)#knhduycc\"},\"address_look_ahead\":2}").unwrap();
+        let sender_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test_2\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8dWQe989ftsPNn9NddyKVri3GHs4voe2E4xS75oX9neHeQGCnbn2ru3o1mbxmW2SnNRtpMdaopc6GWftoGMyhKPX3zjCBTKU1Ckw6E6NmQL/0\'/0/*)\",\"internal\":\"wpkh([0776ff86/0\'/1]tprv8dWQe989ftsPRPriFR6w1cG3R2s5FBxXsDscygXe8RiaUQrRkA7J8FFJwTPRBoLia7fqVB8s87SQ5rLnVjbZfDpuorRkBBqrSHKVbhUMYmq/0\'/1/*)#ynv3pma4\",\"public\":\"wpkh([0776ff86/0\'/0/0\']tpubDCmXi7Tx4hixdHtw4WVgnSAsDJ4Q8oR3NSq6DYRmCC46hihokPaHo3RAdaSQza8sWtAU63zt5VgkgYt6tUmZQWqVZio5vptzgrNMmrRwcBF/0/*)#cn8qlh6k\"},\"address_look_ahead\":2}").unwrap();
+
+        let rcvr_wallet: ElectrumMemoryWallet = rcvr_wallet_cfg.into();
+        let sender_wallet: ElectrumMemoryWallet = sender_wallet_cfg.into();
+
+        let recipients = (1..3)
+            .map(|i| (rcvr_wallet.get_new_address().unwrap().to_string(), 1000 * i))
+            .collect();
+        let txn = CreateTx {
+            recipients,
+            fee_type: FeeType::Rate,
+            fee: 4.0,
+            spend_change: SpendChangePolicy::Yes,
+            enable_rbf: true,
+        };
+
+        let txn_json = serde_json::to_string(&txn).unwrap();
+        println!("txn json {}", txn_json);
+        let txn: CreateTx = serde_json::from_str(&txn_json).unwrap();
+
+        let wallet_txn = create_tx_to_wallet_txn(&sender_wallet, txn).unwrap();
+        println!("txn wallet {:?} {:?}", wallet_txn.0, wallet_txn.1);
+    }
     #[test]
     #[ignore]
     fn can_sync_wallet_and_sign_utxos() {
