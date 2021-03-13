@@ -23,6 +23,7 @@ use torut::onion::TorSecretKeyV3;
 
 type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>>;
 type G = AuthenticatedConn<TcpStream, F>;
+
 lazy_static! {
     pub static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
         tokio::runtime::Builder::new_multi_thread()

@@ -7,8 +7,8 @@ pub use bdk::bitcoin::util::bip32::{
     IntoDerivationPath,
 };
 pub use bdk::bitcoin::{secp256k1, Address, Network, OutPoint, PrivateKey, Script, Txid};
-use bdk::blockchain::{log_progress, Blockchain, ElectrumBlockchain, Progress, ProgressData};
-use bdk::database::{BatchDatabase, MemoryDatabase};
+pub use bdk::blockchain::{log_progress, Blockchain, ElectrumBlockchain, Progress, ProgressData};
+pub use bdk::database::{BatchDatabase, MemoryDatabase};
 use bdk::descriptor::IntoWalletDescriptor;
 use bdk::electrum_client::Client;
 use bdk::keys::bip39::{Language, Mnemonic, MnemonicType};
@@ -39,11 +39,11 @@ pub struct WalletCfg {
     db_path: Option<String>,
 }
 
-#[repr(C)]
+// #[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct XprvsWithPaths(ExtendedPrivKey, DerivationPath, Fingerprint);
 
-#[repr(C)]
+// #[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DerivedBip39Xprvs {
     phrase: String,
@@ -138,6 +138,7 @@ pub fn create_tx_to_wallet_txn<B: Blockchain, D: BatchDatabase>(
 }
 pub type ElectrumMemoryWallet = Wallet<ElectrumBlockchain, MemoryDatabase>;
 pub type ElectrumSledWallet = Wallet<ElectrumBlockchain, sled::Tree>;
+pub type BdkWallet<B: Blockchain, D: BatchDatabase> = Wallet<B,D>;
 
 impl From<WalletCfg> for ElectrumMemoryWallet {
     fn from(cfg: WalletCfg) -> ElectrumMemoryWallet {
