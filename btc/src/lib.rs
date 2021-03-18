@@ -6,6 +6,7 @@ pub use bdk::bitcoin::util::bip32::{
     ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, ExtendedPubKey, Fingerprint,
     IntoDerivationPath,
 };
+pub use bdk;
 pub use bdk::bitcoin::{secp256k1, Address, Network, OutPoint, PrivateKey, Script, Txid};
 pub use bdk::blockchain::{log_progress, Blockchain, ElectrumBlockchain, Progress, ProgressData};
 pub use bdk::database::{BatchDatabase, MemoryDatabase};
@@ -96,49 +97,50 @@ pub struct CreateTx {
 }
 
 /// Converts a CreateTx struct into a BDK TxnBuilder and finalizes it
-pub fn create_tx_to_wallet_txn<B: Blockchain, D: BatchDatabase>(
-    wallet: &Wallet<B, D>,
-    tx: CreateTx,
-) -> Result<
-    (
-        bdk::bitcoin::util::psbt::PartiallySignedTransaction,
-        bdk::TransactionDetails,
-    ),
-    BtcErrors,
-> {
-    let mut txn = wallet.build_tx();
-    // strings to addresses
-    let rcpts: Result<Vec<(Script, u64)>, BtcErrors> = tx
-        .recipients
-        .into_iter()
-        .map(|(addr, amount)| {
-            let address = Address::from_str(addr.as_str())?.script_pubkey();
-            Ok((address, amount))
-        })
-        .collect();
+impl CreateTx {
+    pub fn into_wallet_txn<B: Blockchain, D: BatchDatabase>(
+        self,
+        wallet: &Wallet<B, D>,
+    ) -> Result<
+        (
+            bdk::bitcoin::util::psbt::PartiallySignedTransaction,
+            bdk::TransactionDetails,
+        ),
+        BtcErrors,
+    > {
+        let mut txn = wallet.build_tx();
+        // strings to addresses
+        let rcpts: Result<Vec<(Script, u64)>, BtcErrors> = self
+            .recipients
+            .into_iter()
+            .map(|(addr, amount)| {
+                let address = Address::from_str(addr.as_str())?.script_pubkey();
+                Ok((address, amount))
+            })
+            .collect();
 
-    txn.set_recipients(rcpts?);
-    match tx.fee_type {
-        FeeType::Abs => txn.fee_absolute(tx.fee as u64),
-        FeeType::Rate => txn.fee_rate(FeeRate::from_sat_per_vb(tx.fee)),
-    };
+        txn.set_recipients(rcpts?);
+        match self.fee_type {
+            FeeType::Abs => txn.fee_absolute(self.fee as u64),
+            FeeType::Rate => txn.fee_rate(FeeRate::from_sat_per_vb(self.fee)),
+        };
 
-    match tx.spend_change {
-        SpendChangePolicy::No => {
-            txn.do_not_spend_change();
-        }
-        SpendChangePolicy::OnlyChange => {
-            txn.only_spend_change();
-        }
-        _ => (),
-    };
+        match self.spend_change {
+            SpendChangePolicy::No => {
+                txn.do_not_spend_change();
+            }
+            SpendChangePolicy::OnlyChange => {
+                txn.only_spend_change();
+            }
+            _ => (),
+        };
 
-    txn.enable_rbf();
-    txn.finish().map_err(|err| BtcErrors::BdkError(err))
+        txn.enable_rbf();
+        txn.finish().map_err(BtcErrors::BdkError)
+    }
 }
 pub type ElectrumMemoryWallet = Wallet<ElectrumBlockchain, MemoryDatabase>;
 pub type ElectrumSledWallet = Wallet<ElectrumBlockchain, sled::Tree>;
-pub type BdkWallet<B: Blockchain, D: BatchDatabase> = Wallet<B,D>;
 
 impl From<WalletCfg> for ElectrumMemoryWallet {
     fn from(cfg: WalletCfg) -> ElectrumMemoryWallet {
@@ -485,7 +487,6 @@ mod tests {
 
     #[test]
     fn generate_a_bip39_wallet_with_n_keys_from_path() {
-        let num_child = 2;
         // segwit/coin/account
         let derive_base = "m/44'/0'/0'";
         let network = Network::Testnet;
@@ -512,7 +513,6 @@ mod tests {
     }
     #[test]
     fn electrum_sled() {
-        let num_child = 2;
         // segwit/coin/account
         let derive_base = "m/44'/0'/0'";
         let network = Network::Testnet;
@@ -560,7 +560,7 @@ mod tests {
         println!("txn json {}", txn_json);
         let txn: CreateTx = serde_json::from_str(&txn_json).unwrap();
 
-        let wallet_txn = create_tx_to_wallet_txn(&sender_wallet, txn).unwrap();
+        let wallet_txn = txn.into_wallet_txn(&sender_wallet).unwrap();
         println!("txn wallet {:?} {:?}", wallet_txn.0, wallet_txn.1);
     }
     #[test]
@@ -573,24 +573,14 @@ mod tests {
         let sender_wallet: ElectrumMemoryWallet = sender_wallet_cfg.into();
 
         println!("rcvr add {}", rcvr_wallet.get_new_address().unwrap());
-        struct SifirWallet {
-            version: String,
-        }
-        // TODO SifirWallet<T=WalletType>
-        impl SifirWallet {
-            pub fn new() -> Self {
-                SifirWallet {
-                    version: "0.0.1".into(),
-                }
-            }
-        }
+        struct SifirWallet {} // TODO SifirWallet<T=WalletType>
         impl Progress for SifirWallet {
             fn update(&self, progress: f32, message: Option<String>) -> Result<(), bdk::Error> {
                 println!("progress is {} and message {:?}", progress, message);
                 Ok(())
             }
         };
-        let sync_result = sender_wallet.sync(SifirWallet::new(), Some(100));
+        let sync_result = sender_wallet.sync(SifirWallet {}, Some(100));
         sync_result.unwrap();
 
         let balance = sender_wallet.get_balance().unwrap();
@@ -601,9 +591,9 @@ mod tests {
             .do_not_spend_change()
             .enable_rbf();
 
-        let (psbt, tx_details) = txn.finish().unwrap();
+        let (psbt, _tx_details) = txn.finish().unwrap();
         let (psbt_signed, finished) = sender_wallet.sign(psbt, None).unwrap();
         assert!(finished);
-        let txn_id = sender_wallet.broadcast(psbt_signed.extract_tx()).unwrap();
+        let _txn_id = sender_wallet.broadcast(psbt_signed.extract_tx()).unwrap();
     }
 }

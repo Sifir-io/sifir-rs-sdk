@@ -1,10 +1,10 @@
 use crate::util::*;
 use btc::*;
 use libc::{c_char, c_void};
+use serde_json::json;
 use std::borrow::Borrow;
 use std::ffi::{CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
-use serde_json::json;
 
 macro_rules! unwind_into_boxed_result {
     ($e:expr) => {
@@ -126,10 +126,9 @@ pub extern "C" fn electrum_wallet_from_wallet_cfg(
     })
 }
 
-// FIXME does this work ??
 #[no_mangle]
-pub extern "C" fn get_wallet_balance<B: Blockchain, D: BatchDatabase>(
-    electrum_wallet: *mut BdkWallet<B,D>,
+pub extern "C" fn get_electrum_wallet_balance(
+    electrum_wallet: *mut ElectrumSledWallet,
 ) -> *mut BoxedResult<u64> {
     let wallet = unsafe { &mut *electrum_wallet };
     let matcher = AssertUnwindSafe(wallet);
@@ -137,8 +136,8 @@ pub extern "C" fn get_wallet_balance<B: Blockchain, D: BatchDatabase>(
 }
 
 #[no_mangle]
-pub extern "C" fn get_wallet_new_address<B: Blockchain, D: BatchDatabase>(
-    electrum_wallet: *mut BdkWallet<B,D>,
+pub extern "C" fn get_electrum_wallet_new_address(
+    electrum_wallet: *mut ElectrumSledWallet,
 ) -> *mut BoxedResult<*mut c_char> {
     let wallet = unsafe { &mut *electrum_wallet };
     let matcher = AssertUnwindSafe(wallet);
@@ -149,16 +148,30 @@ pub extern "C" fn get_wallet_new_address<B: Blockchain, D: BatchDatabase>(
     })
 }
 
-//#[no_mangle]
-//pub extern "C" fn sync_wallet(electrum_wallet: *mut ElectrumSledWallet) -> *mut BoxedResult<bool> {
-//    let wallet = unsafe { &mut *electrum_wallet };
-//    let matcher = AssertUnwindSafe(wallet);
-//    unwind_into_boxed_result!({
-//        // FIXME HERE make this aaysn
-//        let _ = matcher.sync().unwrap();
-//        true
-//    })
-//}
+#[no_mangle]
+pub extern "C" fn sync_electrum_wallet(
+    electrum_wallet: *mut ElectrumSledWallet,
+    max_address_count: u32,
+) -> *mut BoxedResult<bool> {
+    let wallet = unsafe { &mut *electrum_wallet };
+    let matcher = AssertUnwindSafe(wallet);
+    unwind_into_boxed_result!({
+        struct SifirWallet {};
+        impl Progress for SifirWallet {
+            fn update(&self, progress: f32, message: Option<String>) -> Result<(), bdk::Error> {
+                println!(
+                    "ios ffi sync progress is {} and message {:?}, TODO THIS TO OBSERVER",
+                    progress, message
+                );
+                Ok(())
+            }
+        };
+        let _ = matcher
+            .sync(SifirWallet {}, Some(max_address_count))
+            .unwrap();
+        true
+    })
+}
 
 /// Generates a finalized txn from CreateTxn json
 pub extern "C" fn create_tx(
@@ -170,7 +183,7 @@ pub extern "C" fn create_tx(
     unwind_into_boxed_result!({
         let txn_str = required_str_from_cchar_ptr!(tx);
         let create_txn: CreateTx = serde_json::from_str(txn_str).unwrap();
-        let (pp, txn) = create_tx_to_wallet_txn(&matcher, create_txn).unwrap();
+        let (pp, txn) = create_txn.into_wallet_txn(&matcher).unwrap();
         let txn_json = json!({"partiallySignedPsbt": pp, "txnDetails" : txn});
         CString::new(txn_json.to_string()).unwrap().into_raw()
     })
