@@ -38,6 +38,8 @@ pub struct WalletCfg {
     descriptors: WalletDescriptors,
     address_look_ahead: u32,
     db_path: Option<String>,
+    // FIXME enable this , right now we have electrum server hard coded
+    // server_uri: Option<String>
 }
 
 // #[repr(C)]
@@ -86,7 +88,7 @@ enum SpendChangePolicy {
     OnlyChange,
 }
 
-/// Txn paramteres Easy to serialize into JSON and send across FFI
+/// Txn parameters Easy to serialize into JSON and send across FFI
 #[derive(Debug, Serialize, Deserialize)]
 pub struct CreateTx {
     recipients: Vec<(String, u64)>,

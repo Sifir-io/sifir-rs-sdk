@@ -18,6 +18,7 @@ fn setup_java() {
                 .join("java")
                 .join("com")
                 .join("sifir")
+                // FIXME this depending on cfg
                 .join("tor"),
             "com.sifir.tor".into(),
         ), // .use_null_annotation_from_package("android.support.annotation".into()),
