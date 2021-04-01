@@ -118,6 +118,7 @@ impl TcpSocksStream {
             tcp_stream.set_write_timeout(timeout)?;
         }
         tcp_stream.write_all(data.as_bytes())?;
+        tcp_stream.flush()?;
         Ok(())
     }
     pub fn shutdown(&mut self) -> Result<(), TorErrors> {
