@@ -174,6 +174,7 @@ pub extern "C" fn sync_electrum_wallet(
 }
 
 /// Generates a finalized txn from CreateTxn json
+#[no_mangle]
 pub extern "C" fn create_tx(
     wallet: *mut ElectrumSledWallet,
     tx: *const c_char,
@@ -196,6 +197,7 @@ pub unsafe extern "C" fn destroy_cstr(c_str: *mut c_char) {
     let _ = Box::from_raw(c_str);
 }
 
+#[no_mangle]
 pub unsafe extern "C" fn drop_wallet(wallet: *mut ElectrumSledWallet) {
     assert!(!wallet.is_null());
     let _: Box<ElectrumSledWallet> = Box::from_raw(wallet);

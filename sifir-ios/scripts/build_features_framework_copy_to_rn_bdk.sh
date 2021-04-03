@@ -40,12 +40,14 @@ retVal=$?
 
 echo "-------- Building Done: ${lib_output_target_dir} ------- "
 
-# TODO add extra typedefs here via Sed?
 working_dir="../output/${framework_name}/target/framework/$framework_name.framework";
 
 mkdir -p "$working_dir/Headers";
 mkdir -p "$working_dir/Modules";
 \cp -f "../output/${framework_name}.h" "$working_dir/Headers/$framework_name.h"
+retVal=$?
+[ ! $retVal -eq 0 ] && exit 1;
+\cp -f "../sifir-types.h" "$working_dir/Headers/sifir-types.h"
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 
@@ -83,6 +85,7 @@ HERE
 cat <<HERE > "$working_dir/Modules/module.modulemap"
 framework module "$framework_name" {
     header "$framework_name.h"
+    header "sifir-types.h"
     export *
 }
 HERE
