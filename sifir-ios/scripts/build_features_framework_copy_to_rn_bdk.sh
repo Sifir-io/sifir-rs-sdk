@@ -20,21 +20,21 @@ echo "---------------";
 echo "---------------";
 
 # Build local (+ FFI)
-SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo  build -p sifir-ios --release --features "$features";
+SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo build -p sifir-ios --release --features "$features";
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
-SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo lipo -p sifir-ios --release --features "$features"
+SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo lipo -p sifir-ios --release --features "$features";
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 
 # copy indiviual arch libs  for testing
-mkdir -p ../output/release/universal/"$under_scored_features"
+mkdir -p ../output/release/universal/"$under_scored_features";
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 
-lib_output_target_dir="../output/release/universal/${under_scored_features}/libsifir_ios.a"
+lib_output_target_dir="../output/release/universal/${under_scored_features}/libsifir_ios.a";
 
-\cp -f ../../target/universal/release/libsifir_ios.a "$lib_output_target_dir"
+\cp -f ../../target/universal/release/libsifir_ios.a "$lib_output_target_dir";
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 

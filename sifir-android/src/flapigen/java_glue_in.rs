@@ -3,6 +3,8 @@ use jni_sys::*;
 use log::{debug, info};
 use serde::Serialize;
 use std::time::Duration;
+
+#[cfg(feature = "tor_daemon")]
 use tor::{
     tcp_stream::{DataObserver, TcpSocksStream},
     BootstrapPhase, OwnedTorService, OwnedTorServiceBootstrapPhase, TorServiceParam,
@@ -10,11 +12,13 @@ use tor::{
 use btc::*;
 use serde_json::json;
 
+#[cfg(feature = "tor_daemon")]
 foreign_class!(class TorServiceParam {
     self_type TorServiceParam;
     constructor TorServiceParam::new(data_dir:&str,socks_port:u16,bootstap_timeout_ms: u64)->TorServiceParam;
 });
 /// OwnedTorService Android Interface
+#[cfg(feature = "tor_daemon")]
 foreign_class!(class OwnedTorService {
     self_type OwnedTorService;
     constructor new(param:TorServiceParam)->Result<OwnedTorService,String> {
@@ -67,6 +71,7 @@ impl DataObserver for Observer {
 }
 
 /// TcpStream Android Interface
+#[cfg(feature = "tor_daemon")]
 foreign_class!(class TcpSocksStream {
     self_type TcpSocksStream;
     constructor new(target:String,socks_proxy:String,timeout_ms:u64)->Result<TcpSocksStream,String> {

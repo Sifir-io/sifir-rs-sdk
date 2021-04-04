@@ -20,10 +20,10 @@ echo "---------------";
 echo "---------------";
 
 # Build local (+ FFI)
-SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo  build -p sifir-ios --release --features "$features";
+SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo build -p sifir-ios --release --features "$features";
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
-SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo lipo -p sifir-ios --release --features "$features"
+SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo lipo -p sifir-ios --release --features "$features";
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 
@@ -40,7 +40,6 @@ retVal=$?
 
 echo "-------- Building Done: ${lib_output_target_dir} ------- "
 
-# TODO add extra typedefs here via Sed?
 working_dir="../output/${framework_name}/target/framework/$framework_name.framework";
 
 mkdir -p "$working_dir/Headers";
