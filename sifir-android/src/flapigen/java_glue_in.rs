@@ -137,7 +137,7 @@ foreign_class!(class ElectrumSledWallet {
         this.get_balance().map_err(|e| { format!("{:#?}",e)})
     }
     fn get_new_address(&mut self)->Result<String,String>{
-        let address = this.get_new_address().map_err(|e| { format!("{:#?}",e)}).unwrap();
+        let address = this.get_address(AddressIndex::New).map_err(|e| { format!("{:#?}",e)}).unwrap();
         serde_json::to_string(&address).map_err(|e| { format!("{:#?}",e)})
     }
     fn sync(&mut self,max_address_count:u32)-> Result<(),String> {

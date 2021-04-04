@@ -1,3 +1,4 @@
+pub use bdk;
 use bdk::bitcoin::consensus::encode::{
     deserialize, serialize, serialize_hex, Error as BitcoinError,
 };
@@ -6,7 +7,6 @@ pub use bdk::bitcoin::util::bip32::{
     ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, ExtendedPubKey, Fingerprint,
     IntoDerivationPath,
 };
-pub use bdk;
 pub use bdk::bitcoin::{secp256k1, Address, Network, OutPoint, PrivateKey, Script, Txid};
 pub use bdk::blockchain::{log_progress, Blockchain, ElectrumBlockchain, Progress, ProgressData};
 pub use bdk::database::{BatchDatabase, MemoryDatabase};
@@ -17,6 +17,7 @@ use bdk::keys::{
     DerivableKey, DescriptorKey, ExtendedKey, GeneratableKey, GeneratedKey, KeyError, ScriptContext,
 };
 use bdk::miniscript::miniscript;
+pub use bdk::wallet::AddressIndex;
 pub use bdk::{sled, FeeRate, TxBuilder, Wallet};
 use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
@@ -387,7 +388,11 @@ mod tests {
             ElectrumBlockchain::from(Client::new("ssl://electrum.blockstream.info:60002").unwrap()),
         )
         .unwrap();
-        let address = wallet.get_new_address().unwrap().address_type().unwrap();
+        let address = wallet
+            .get_address(AddressIndex::New)
+            .unwrap()
+            .address_type()
+            .unwrap();
         assert_eq!(format!("{}", address), "p2wpkh")
     }
     #[test]
@@ -408,7 +413,11 @@ mod tests {
             db_path: None,
         }
         .into();
-        let address = wallet.get_new_address().unwrap().address_type().unwrap();
+        let address = wallet
+            .get_address(AddressIndex::New)
+            .unwrap()
+            .address_type()
+            .unwrap();
         assert_eq!(format!("{}", address), "p2pkh")
     }
 
@@ -432,7 +441,7 @@ mod tests {
             db_path: None,
         }
         .into();
-        let address = wallet.get_new_address().unwrap();
+        let address = wallet.get_address(AddressIndex::New).unwrap();
         assert_eq!("mnqdgsNu8p2YCUAqQcbm5AVBMRXjMAnw5y", address.to_string());
         assert_eq!(format!("{}", address.address_type().unwrap()), "p2pkh");
         // get the HD wallet seed
@@ -510,7 +519,7 @@ mod tests {
             db_path: None,
         };
         let wallet: ElectrumMemoryWallet = wallet_cfg.into();
-        let address = wallet.get_new_address().unwrap();
+        let address = wallet.get_address(AddressIndex::New).unwrap();
         assert_eq!(format!("{}", address.address_type().unwrap()), "p2wpkh");
     }
     #[test]
@@ -535,7 +544,7 @@ mod tests {
             db_path: Some(String::from("/tmp/sifir-bdk")),
         };
         let wallet: ElectrumSledWallet = wallet_cfg.into();
-        let address = wallet.get_new_address().unwrap();
+        let address = wallet.get_address(AddressIndex::New).unwrap();
         assert_eq!(format!("{}", address.address_type().unwrap()), "p2wpkh");
     }
 
@@ -548,7 +557,15 @@ mod tests {
         let sender_wallet: ElectrumMemoryWallet = sender_wallet_cfg.into();
 
         let recipients = (1..3)
-            .map(|i| (rcvr_wallet.get_new_address().unwrap().to_string(), 1000 * i))
+            .map(|i| {
+                (
+                    rcvr_wallet
+                        .get_address(AddressIndex::New)
+                        .unwrap()
+                        .to_string(),
+                    1000 * i,
+                )
+            })
             .collect();
         let txn = CreateTx {
             recipients,
@@ -574,7 +591,10 @@ mod tests {
         let rcvr_wallet: ElectrumMemoryWallet = rcvr_wallet_cfg.into();
         let sender_wallet: ElectrumMemoryWallet = sender_wallet_cfg.into();
 
-        println!("rcvr add {}", rcvr_wallet.get_new_address().unwrap());
+        println!(
+            "rcvr add {}",
+            rcvr_wallet.get_address(AddressIndex::New).unwrap()
+        );
         struct SifirWallet {} // TODO SifirWallet<T=WalletType>
         impl Progress for SifirWallet {
             fn update(&self, progress: f32, message: Option<String>) -> Result<(), bdk::Error> {
@@ -588,10 +608,16 @@ mod tests {
         let balance = sender_wallet.get_balance().unwrap();
         assert!(balance > 100);
         let mut txn = sender_wallet.build_tx();
-        txn.add_recipient(rcvr_wallet.get_new_address().unwrap().script_pubkey(), 1000)
-            .fee_rate(FeeRate::from_sat_per_vb(5.0))
-            .do_not_spend_change()
-            .enable_rbf();
+        txn.add_recipient(
+            rcvr_wallet
+                .get_address(AddressIndex::New)
+                .unwrap()
+                .script_pubkey(),
+            1000,
+        )
+        .fee_rate(FeeRate::from_sat_per_vb(5.0))
+        .do_not_spend_change()
+        .enable_rbf();
 
         let (psbt, _tx_details) = txn.finish().unwrap();
         let (psbt_signed, finished) = sender_wallet.sign(psbt, None).unwrap();

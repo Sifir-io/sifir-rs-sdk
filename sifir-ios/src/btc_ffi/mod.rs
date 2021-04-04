@@ -142,7 +142,7 @@ pub extern "C" fn get_electrum_wallet_new_address(
     let wallet = unsafe { &mut *electrum_wallet };
     let matcher = AssertUnwindSafe(wallet);
     unwind_into_boxed_result!({
-        let address = matcher.get_new_address().unwrap();
+        let address = matcher.get_address(AddressIndex::New).unwrap();
         let json = serde_json::to_string(&address).unwrap();
         CString::new(json).unwrap().into_raw()
     })
