@@ -113,10 +113,12 @@ pub enum TorErrors {
     TorLibError(#[from] libtor::Error),
     #[error("Error Bootstraping:")]
     BootStrapError(String),
-    #[error("Error Bootstraping:")]
+    #[error("Error Io:")]
     IoError(#[from] io::Error),
     #[error("Error Threading:")]
     ThreadingError(#[from] JoinError),
+    #[error("Error TcpStream:")]
+    TcpStreamError(String),
 }
 
 /// Convert Torservice Param into an Unauthentication TorService:

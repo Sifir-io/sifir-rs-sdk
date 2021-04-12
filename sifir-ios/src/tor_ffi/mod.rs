@@ -126,6 +126,7 @@ pub struct Observer {
 }
 
 unsafe impl Send for Observer {}
+unsafe impl Sync for Observer {}
 
 impl DataObserver for Observer {
     fn on_data(&self, data: String) {
@@ -145,7 +146,8 @@ pub extern "C" fn tcp_stream_on_data(
     match catch_unwind(|| {
         assert!(!stream.is_null());
         let stream = unsafe { &mut *stream };
-        stream.on_data(observer).unwrap()
+        stream.set_data_handler(observer).unwrap();
+        stream.read_line_async().map_err(|e| { format!("{:#?}",e)})
     }) {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
         Err(e) => {
