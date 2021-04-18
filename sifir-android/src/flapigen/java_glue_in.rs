@@ -58,6 +58,7 @@ foreign_callback!(callback DataObserver {
 // internally wrap passed the Boxed DataObserver Impl we recieve from Java
 // with Observer so we can Send across threads
 unsafe impl Send for Observer {}
+unsafe impl Sync for Observer {}
 struct Observer {
     cb: Box<dyn DataObserver>,
 }
@@ -77,10 +78,11 @@ foreign_class!(class TcpSocksStream {
     constructor new(target:String,socks_proxy:String,timeout_ms:u64)->Result<TcpSocksStream,String> {
       TcpSocksStream::new_timeout(target,socks_proxy,timeout_ms).map_err(|e| { format!("{:#?}",e) })
     }
-    fn on_data(&self,cb:Box<dyn DataObserver>){
-      this.on_data(Observer{
+    fn on_data(&mut self,cb:Box<dyn DataObserver>)->Result<(),String>{
+      this.set_data_handler(Observer{
        cb,
       }).unwrap();
+      this.read_line_async().map_err(|e| { format!("{:#?}",e)})
     }
     fn send_data(&mut self, msg:String,timeout:u64)->Result<(),String>{
         this.send_data(msg, Some(Duration::new(timeout, 0))).map_err(|e| { format!("{:#?}",e) })
