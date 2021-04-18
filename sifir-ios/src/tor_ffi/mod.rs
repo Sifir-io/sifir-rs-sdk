@@ -1,6 +1,7 @@
 use libc::{c_char, c_void};
 use std::ffi::{CStr, CString};
-use std::panic::catch_unwind;
+use std::ops::{Deref, DerefMut};
+use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Duration;
 use tor::{
     tcp_stream::{DataObserver, TcpSocksStream},
@@ -140,21 +141,21 @@ impl DataObserver for Observer {
 ///# Safety
 /// Send a Message over a tcpStream
 pub extern "C" fn tcp_stream_on_data(
-    stream: *mut TcpSocksStream,
+    stream_ptr: *mut TcpSocksStream,
     observer: Observer,
 ) -> *mut ResultMessage {
-    match catch_unwind(|| {
-        assert!(!stream.is_null());
-        let stream = unsafe { &mut *stream };
-        stream.set_data_handler(observer).unwrap();
-        stream.read_line_async().map_err(|e| { format!("{:#?}",e)})
-    }) {
+    assert!(!stream_ptr.is_null());
+    match {
+        let stream = unsafe { &mut *stream_ptr };
+        if let Err(e) = stream.set_data_handler(observer) {
+            Err(e)
+        } else {
+            stream.read_line_async()
+        }
+    } {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
         Err(e) => {
-            let message = match e.downcast::<String>() {
-                Ok(msg) => *msg,
-                Err(_) => String::from("Unknown panic"),
-            };
+            let message = format!("{:?}",e);
             Box::into_raw(Box::new(ResultMessage::Error(
                 CString::new(message).unwrap().into_raw(),
             )))
@@ -165,35 +166,29 @@ pub extern "C" fn tcp_stream_on_data(
 ///# Safety
 /// Send a Message over a tcpStream
 pub extern "C" fn tcp_stream_send_msg(
-    stream: *mut TcpSocksStream,
+    stream_ptr: *mut TcpSocksStream,
     msg: *const c_char,
     timeout: u64,
 ) -> *mut ResultMessage {
-    match catch_unwind(|| {
-        assert!(!stream.is_null());
-        assert!(!msg.is_null());
-        let stream = unsafe { &mut *stream };
+    assert!(!stream_ptr.is_null());
+    assert!(!msg.is_null());
+    match {
+        let mut stream = unsafe { &mut *stream_ptr };
         let msg_str: String = unsafe { CStr::from_ptr(msg) }
             .to_str()
             .expect("Could not get str from proxy")
             .into();
-        stream
-            .send_data(msg_str, Some(Duration::new(timeout, 0)))
-            .unwrap()
-    }) {
+        stream.send_data(msg_str, Some(Duration::new(timeout, 0)))
+    } {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
         Err(e) => {
-            let message = match e.downcast::<String>() {
-                Ok(msg) => *msg,
-                Err(_) => String::from("Unknown panic"),
-            };
+            let message = format!("{:?}",e);
             Box::into_raw(Box::new(ResultMessage::Error(
                 CString::new(message).unwrap().into_raw(),
             )))
         }
     }
 }
-// FIXME here on_data interface
 
 #[no_mangle]
 ///# Safety

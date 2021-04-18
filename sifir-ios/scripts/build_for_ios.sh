@@ -11,6 +11,8 @@ echo "---------------";
 
 # Build local (+ FFI)
 cargo  build -p sifir-ios --release;
+retVal=$?
+[ ! $retVal -eq 0 ] && exit 1;
 
 export IPHONEOS_DEPLOYMENT_TARGET="11.0"
 

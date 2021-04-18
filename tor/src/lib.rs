@@ -448,7 +448,7 @@ mod tests {
 
     #[test]
     #[serial(tor)]
-    fn get_from_param_and_await_boostrap_using_TorControlApi() {
+    fn from_param_and_await_boostrap() {
         (*RUNTIME).lock().unwrap().block_on(async {
             let service: TorService = TorServiceParam {
                 socks_port: Some(19051),
@@ -529,7 +529,7 @@ mod tests {
 
     #[test]
     #[serial(tor)]
-    fn get_status_of_OwnedTorService() {
+    fn get_status() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
             data_dir: String::from("/tmp/sifir_rs_sdk"),
@@ -544,7 +544,7 @@ mod tests {
     }
     #[test]
     #[serial(tor)]
-    fn TorService_create_hidden_service() {
+    fn create_hidden_service() {
         let service: TorService = TorServiceParam {
             socks_port: Some(19054),
             data_dir: String::from("/tmp/sifir_rs_sdk"),
