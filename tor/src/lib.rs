@@ -173,20 +173,6 @@ impl TryFrom<TorServiceParam> for TorService {
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
             .flag(TorFlag::ControlPortWriteToFile(ctl_file_path.clone()))
             .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
-            .flag(TorFlag::TruncateLogFile(TorBool::True));
-        // TODO Logging breaks Bootstrapping on IOS, probably permissions issue.
-        #[cfg(not(target_os = "ios"))]
-        {
-            service
-                .flag(TorFlag::LogTo(
-                    libtor::LogLevel::Info,
-                    libtor::LogDestination::File(info_log_path),
-                ))
-                .flag(TorFlag::LogTo(
-                    libtor::LogLevel::Err,
-                    libtor::LogDestination::File(error_log_path),
-                ));
-        }
 
         let handle = service.start_background();
 
