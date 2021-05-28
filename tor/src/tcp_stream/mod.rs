@@ -21,7 +21,7 @@ pub trait DataObserver {
 
 impl TcpSocksStream {
     /// Blocks indefinitely until connection established
-    pub fn new(target: String, socks_proxy: String) -> Result<Self,TorErrors> {
+    pub fn new(target: String, socks_proxy: String) -> Result<Self, TorErrors> {
         let socks_stream = Socks5Stream::connect(socks_proxy.as_str(), target.as_str())?;
         Ok(TcpSocksStream {
             target,

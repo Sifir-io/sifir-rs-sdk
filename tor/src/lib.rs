@@ -1,8 +1,8 @@
 pub mod tcp_stream;
-
 use futures::{Future, TryStreamExt};
 use lazy_static::*;
 use libtor::{Tor, TorAddress, TorBool, TorFlag};
+use logger::log::*;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::convert::{TryFrom, TryInto};
@@ -12,6 +12,7 @@ use std::io::{Read, Write};
 use std::net::{IpAddr, Ipv4Addr, SocketAddr};
 use std::net::{TcpListener, ToSocketAddrs};
 use std::pin::Pin;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Mutex;
 use std::thread::JoinHandle;
 use thiserror::Error;
@@ -23,9 +24,18 @@ use torut::onion::TorSecretKeyV3;
 
 type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>>;
 type G = AuthenticatedConn<TcpStream, F>;
+
 lazy_static! {
     pub static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
         tokio::runtime::Builder::new_multi_thread()
+            .max_threads(num_cpus::get() / 2)
+            .thread_name_fn(|| {
+                static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+                let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
+                format!("sifir-thread-pool-{}", id)
+            })
+            .on_thread_start(|| { debug!("thread started on {} cpus", num_cpus::get()) })
+            .on_thread_stop(|| { debug!("thread stopped") })
             .enable_all()
             .build()
             .unwrap()
@@ -172,7 +182,17 @@ impl TryFrom<TorServiceParam> for TorService {
             .flag(TorFlag::ControlPortAuto)
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
             .flag(TorFlag::ControlPortWriteToFile(ctl_file_path.clone()))
-            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
+            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True));
+        // // Android logging to android
+        // #[cfg(target_os = "android")]
+        // {
+        //     service
+        //         .flag(TorFlag::AndroidIdentityTag("com.sifir.tor".into()))
+        //         .flag(TorFlag::LogTo(
+        //             libtor::LogLevel::Debug,
+        //             libtor::LogDestination::Android,
+        //         ));
+        // }
 
         let handle = service.start_background();
 
