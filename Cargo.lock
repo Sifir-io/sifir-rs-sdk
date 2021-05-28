@@ -131,8 +131,8 @@ checksum = "904dfeac50f3cdaba28fc6f57fdcddb75f49ed61346676a78c4ffe55877802fd"
 
 [[package]]
 name = "bdk"
-version = "0.5.2-dev"
-source = "git+https://github.com/bitcoindevkit/bdk.git#1e6b8e12b22dd2a2ddd05792855cccdc24fef98f"
+version = "0.7.0"
+source = "git+https://github.com/bitcoindevkit/bdk.git?rev=766570abfde68c9a9ef4b00db60db61cec561280#766570abfde68c9a9ef4b00db60db61cec561280"
 dependencies = [
  "async-trait",
  "bdk-macros",
@@ -1097,9 +1097,9 @@ checksum = "56d855069fafbb9b344c0f962150cd2c1187975cb1c22c1522c240d8c4986714"
 
 [[package]]
 name = "libtor"
-version = "45.7.0+0.4.5.7"
+version = "45.8.0+0.4.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "66c9edbba178ef1bf8453c1f4e66fab9bd78a5f9879327f637db2b6b50995ff5"
+checksum = "7e98eb97f8ff55703846611ce119308b9e72eb0a30d5d09cb2d857fa865753fa"
 dependencies = [
  "libtor-derive",
  "libtor-sys",
@@ -1119,9 +1119,9 @@ dependencies = [
 
 [[package]]
 name = "libtor-sys"
-version = "45.7.0+0.4.5.7"
+version = "45.8.0+0.4.5.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6ce747cd374e0fd66d5d8b6b79fd7541b3e0a18881de7568e4c1796b9320c709"
+checksum = "1a70a39d18f86b85b803846a70c9061f7b83a7779e86a833b26bc92624b68035"
 dependencies = [
  "autotools",
  "cc",
@@ -1132,9 +1132,9 @@ dependencies = [
 
 [[package]]
 name = "libz-sys"
-version = "1.1.2"
+version = "1.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "602113192b08db8f38796c4e85c39e960c145965140e918018bcde1952429655"
+checksum = "de5435b8549c16d423ed0c03dbaafe57cf6c3344744f1242520d59c9d8ecec66"
 dependencies = [
  "cc",
  "libc",
