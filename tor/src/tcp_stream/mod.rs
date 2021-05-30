@@ -3,7 +3,6 @@ use crate::RUNTIME;
 use socks::Socks5Stream;
 use std::borrow::{Borrow, BorrowMut};
 use std::io::BufRead;
-use std::io::BufReader;
 use std::io::{Read, Write};
 use std::net::Shutdown;
 use std::ops::{Deref, DerefMut};
