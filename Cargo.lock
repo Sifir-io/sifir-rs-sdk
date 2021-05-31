@@ -2333,6 +2333,7 @@ checksum = "720ba21c25078711bf456d607987d95bce90f7c3bea5abe1db587862e7a1e87c"
 dependencies = [
  "autocfg",
  "bytes 0.6.0",
+ "futures-core",
  "libc",
  "memchr",
  "mio 0.7.7",

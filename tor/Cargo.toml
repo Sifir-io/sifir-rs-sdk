@@ -7,7 +7,7 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version= "0.3", features = ["net","rt","process","rt-multi-thread","time","sync"] }
+tokio = { version= "0.3", features = ["net","rt","process","rt-multi-thread","time","sync","stream"] }
 logger = { path = "../logger" }
 libtor = { version= "45.8.0+0.4.5.8", features=["vendored-openssl"] }
 torut = { version = "0.1.7", features=["control","v3","vendored_openssl"] }

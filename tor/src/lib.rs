@@ -1,4 +1,5 @@
 pub mod tcp_stream;
+pub mod hidden_service;
 use futures::{Future, TryStreamExt};
 use lazy_static::*;
 use libtor::{Tor, TorAddress, TorBool, TorFlag};
