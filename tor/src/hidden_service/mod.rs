@@ -16,8 +16,8 @@ use tokio::net::{TcpListener, ToSocketAddrs};
 // use tokio::stream::StreamExt;
 use tokio::sync::{Mutex, RwLock};
 use tokio::time::{timeout, Duration};
-use torut::control::TorErrorKind;
 use tokio_compat_02::FutureExt;
+use torut::control::TorErrorKind;
 
 type HiddenServiceDataHandler = Box<dyn DataObserver + Send + Sync + 'static>;
 
@@ -106,7 +106,7 @@ impl HiddenServiceHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{TorHiddenServiceParam, TorService, TorServiceParam, OwnedTorService};
+    use crate::{OwnedTorService, TorHiddenServiceParam, TorService, TorServiceParam};
     use serial_test::serial;
     use std::borrow::{Borrow, BorrowMut};
     use std::convert::TryInto;
@@ -156,15 +156,19 @@ mod tests {
         let mut listner = HiddenServiceHandler::new(20000).unwrap();
         let _ = listner.set_data_handler(obv).unwrap();
 
-        (*RUNTIME).lock().unwrap().block_on(async {
-            let client = utils::get_proxied_client(socks_port).unwrap();
-            let mut onion_url =
-                utils::reqwest::Url::parse(&format!("http://{}", service_key.onion_url)).unwrap();
-            let _ = onion_url.set_port(Some(20011 as u16));
+        (*RUNTIME).lock().unwrap().block_on(
+            async {
+                let client = utils::get_proxied_client(socks_port).unwrap();
+                let mut onion_url =
+                    utils::reqwest::Url::parse(&format!("http://{}", service_key.onion_url))
+                        .unwrap();
+                let _ = onion_url.set_port(Some(20011 as u16));
 
-            let resp = client.get(onion_url).send().await.unwrap();
-            assert_eq!(resp.status(), 200);
-        }.compat());
+                let resp = client.get(onion_url).send().await.unwrap();
+                assert_eq!(resp.status(), 200);
+            }
+            .compat(),
+        );
         owned_node.shutdown().unwrap();
     }
 }
