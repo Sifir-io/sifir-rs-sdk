@@ -1,5 +1,5 @@
-pub mod tcp_stream;
 pub mod hidden_service;
+pub mod tcp_stream;
 use futures::{Future, TryStreamExt};
 use lazy_static::*;
 use libtor::{Tor, TorAddress, TorBool, TorFlag};
@@ -167,7 +167,7 @@ impl TryFrom<TorServiceParam> for TorService {
                 Ok(_) => Ok(()),
                 Err(e) => match e.kind() {
                     std::io::ErrorKind::AlreadyExists => {
-                        println!("Log file already exists: {}", e);
+                        debug!("Log file already exists: {}", e);
                         Ok(())
                     }
                     _ => Err(TorErrors::IoError(e)),
@@ -215,7 +215,7 @@ impl TryFrom<TorServiceParam> for TorService {
                     };
                     let data: Vec<&str> = t.split("PORT=").collect();
                     control_port = data[1].into();
-                    println!("Tor success with config port!");
+                    info!("Tor success with config port!");
                     is_ready = true;
                 }
                 Err(e) => {
@@ -345,6 +345,7 @@ impl OwnedTorService {
             .await
             .map_err(TorErrors::ControlConnectionError)?;
 
+            info!("Hidden service created!");
             let onion_url = TorAddress::AddressPort(
                 service_key.public().get_onion_address().to_string(),
                 param.hs_port,

@@ -1,5 +1,6 @@
 use crate::TorErrors;
 use crate::RUNTIME;
+use logger::log::*;
 use socks::Socks5Stream;
 use std::borrow::{Borrow, BorrowMut};
 use std::io::BufRead;
@@ -10,11 +11,10 @@ use std::sync::Arc;
 use tokio::io::{AsyncBufRead, AsyncBufReadExt, AsyncRead, BufReader, ReadBuf};
 use tokio::net::TcpStream;
 use tokio::net::{TcpListener, ToSocketAddrs};
-use tokio::sync::{Mutex, RwLock};
 use tokio::stream::StreamExt;
+use tokio::sync::{Mutex, RwLock};
 use tokio::time::{timeout, Duration};
 use torut::control::TorErrorKind;
-use logger::{log};
 
 type HiddenServiceDataHandler = Box<dyn DataObserver + Send + Sync + 'static>;
 
@@ -55,24 +55,26 @@ impl HiddenServiceHandler {
         let cb_clone = self.data_handler.clone();
         let port = self.port;
         (*RUNTIME).lock().unwrap().spawn(async move {
-                    let mut listener = TcpListener::bind(format!("127.0.0.1:{},",port)).await.unwrap();
-                    while let Some(stream)  = listener.next().await {
-                        match stream {
-                            Ok(data)=>{
-                        let string_buf = format!("{:#?}",data); 
+            let mut listener = TcpListener::bind(format!("127.0.0.1:{},", port))
+                .await
+                .unwrap();
+            while let Some(stream) = listener.next().await {
+                info!("Incoming Connection established!");
+                match stream {
+                    Ok(data) => {
+                        let string_buf = format!("{:#?}", data);
+                        info!("Sending data {}", string_buf);
                         let cb_option = cb_clone.write().await;
-
                         if let Some(ref mut cb) = cb_option.as_ref() {
-                                  cb.on_data(string_buf);
-                            }
-                        
+                            cb.on_data(string_buf);
                         }
-                        Err(e)=>{
-                            error!(e);
-                        }
-                        }
-                    };
-                });
+                    }
+                    Err(e) => {
+                        error!("{}", e);
+                    }
+                }
+            }
+        });
         Ok(())
     }
 
@@ -83,7 +85,7 @@ impl HiddenServiceHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{TorService, TorServiceParam,TorHiddenServiceParam};
+    use crate::{TorHiddenServiceParam, TorService, TorServiceParam};
     use serial_test::serial;
     use std::borrow::{Borrow, BorrowMut};
     use std::convert::TryInto;
@@ -132,7 +134,8 @@ mod tests {
         let obv = Observer {
             count: count.clone(),
         };
-        listner.set_data_handler(obv);
+
+        let _ = listner.set_data_handler(obv).unwrap();
 
         let mut onion_url =
             utils::reqwest::Url::parse(&format!("http://{}", service_key.onion_url)).unwrap();

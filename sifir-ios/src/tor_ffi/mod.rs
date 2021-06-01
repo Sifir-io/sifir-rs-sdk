@@ -155,7 +155,7 @@ pub extern "C" fn tcp_stream_on_data(
     } {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
         Err(e) => {
-            let message = format!("{:?}",e);
+            let message = format!("{:?}", e);
             Box::into_raw(Box::new(ResultMessage::Error(
                 CString::new(message).unwrap().into_raw(),
             )))
@@ -182,7 +182,7 @@ pub extern "C" fn tcp_stream_send_msg(
     } {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
         Err(e) => {
-            let message = format!("{:?}",e);
+            let message = format!("{:?}", e);
             Box::into_raw(Box::new(ResultMessage::Error(
                 CString::new(message).unwrap().into_raw(),
             )))
