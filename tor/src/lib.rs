@@ -20,6 +20,7 @@ use thiserror::Error;
 use tokio::net::TcpStream;
 use tokio::task::JoinError;
 use tokio::time::{timeout, Duration};
+use tokio_compat_02::FutureExt;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
 
@@ -29,7 +30,7 @@ type G = AuthenticatedConn<TcpStream, F>;
 lazy_static! {
     pub static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
         tokio::runtime::Builder::new_multi_thread()
-            .max_threads(num_cpus::get() / 2)
+            .max_blocking_threads(num_cpus::get() / 2)
             .thread_name_fn(|| {
                 static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
                 let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
@@ -254,7 +255,7 @@ impl TorService {
     ) -> Result<AuthenticatedConn<TcpStream, F>, TorErrors> {
         let s = TcpStream::connect(self.control_port.trim()).await?;
         let mut utc = UnauthenticatedConn::new(s);
-        // returns node info + cookie location ?
+        // returns node info + cookie location
         let proto_info = utc
             .load_protocol_info()
             .await
@@ -280,22 +281,27 @@ impl TorService {
     /// and returning an OwnedTorService which is fully bootstrapped and under our control
     /// (If we drop this object the Tor daemon will shut down)
     pub fn into_owned_node(self) -> Result<OwnedTorService, TorErrors> {
-        (*RUNTIME).lock().unwrap().block_on(async {
-            let mut ac = self
-                .get_control_auth_conn(Some(Box::new(handler) as F))
-                .await?;
-            // take ownership before bootstrap so if we timeout we drop control and shutdown deamon
-            ac.take_ownership()
-                .await
-                .map_err(TorErrors::ControlConnectionError)?;
-            ac.wait_bootstrap(Some(self.bootstrap_timeout_ms)).await?;
-            Ok(OwnedTorService {
-                socks_port: self.socks_port,
-                control_port: self.control_port,
-                _handle: self._handle,
-                _ctl: RefCell::new(Some(ac)),
-            })
-        })
+        (*RUNTIME).lock().unwrap().block_on(
+            async {
+                let mut ac = self
+                    .get_control_auth_conn(Some(Box::new(handler) as F))
+                    .compat()
+                    .await?;
+                // take ownership before bootstrap so if we timeout we drop control and shutdown deamon
+                ac.take_ownership()
+                    .compat()
+                    .await
+                    .map_err(TorErrors::ControlConnectionError)?;
+                ac.wait_bootstrap(Some(self.bootstrap_timeout_ms)).await?;
+                Ok(OwnedTorService {
+                    socks_port: self.socks_port,
+                    control_port: self.control_port,
+                    _handle: self._handle,
+                    _ctl: RefCell::new(Some(ac)),
+                })
+            }
+            .compat(),
+        )
     }
 }
 
@@ -319,58 +325,64 @@ impl OwnedTorService {
         &mut self,
         param: TorHiddenServiceParam,
     ) -> Result<TorHiddenService, TorErrors> {
-        (*RUNTIME).lock().unwrap().block_on(async {
-            let mut _ctl = self._ctl.borrow_mut();
-            let ctl = _ctl
-                .as_mut()
-                .ok_or(TorErrors::BootStrapError(String::from("Error mut lock")))?;
+        (*RUNTIME).lock().unwrap().block_on(
+            async {
+                let mut _ctl = self._ctl.borrow_mut();
+                let ctl = _ctl
+                    .as_mut()
+                    .ok_or(TorErrors::BootStrapError(String::from("Error mut lock")))?;
 
-            let service_key = match param.secret_key {
-                Some(key) => key.into(),
-                _ => TorSecretKeyV3::generate(),
-            };
+                let service_key = match param.secret_key {
+                    Some(key) => key.into(),
+                    _ => TorSecretKeyV3::generate(),
+                };
 
-            ctl.add_onion_v3(
-                &service_key,
-                false,
-                false,
-                false,
-                None,
-                &mut [(
+                ctl.add_onion_v3(
+                    &service_key,
+                    false,
+                    false,
+                    false,
+                    None,
+                    &mut [(
+                        param.hs_port,
+                        SocketAddr::new(IpAddr::from(Ipv4Addr::new(127, 0, 0, 1)), param.to_port),
+                    )]
+                    .iter(),
+                )
+                .await
+                .map_err(TorErrors::ControlConnectionError)?;
+
+                info!("Hidden service created!");
+                let onion_url = TorAddress::AddressPort(
+                    service_key.public().get_onion_address().to_string(),
                     param.hs_port,
-                    SocketAddr::new(IpAddr::from(Ipv4Addr::new(127, 0, 0, 1)), param.to_port),
-                )]
-                .iter(),
-            )
-            .await
-            .map_err(TorErrors::ControlConnectionError)?;
-
-            info!("Hidden service created!");
-            let onion_url = TorAddress::AddressPort(
-                service_key.public().get_onion_address().to_string(),
-                param.hs_port,
-            );
-            let secret_key = service_key.as_bytes();
-            Ok(TorHiddenService {
-                onion_url,
-                secret_key,
-            })
-        })
+                );
+                let secret_key = service_key.as_bytes();
+                Ok(TorHiddenService {
+                    onion_url,
+                    secret_key,
+                })
+            }
+            .compat(),
+        )
     }
 
     /// Get the status of the Tor daemon we own
     /// OwnedTorServiceBootstrapPhase will either be Done or Other(String) containing the stage of
     /// the boostrap the node is a
     pub fn get_status(&self) -> Result<OwnedTorServiceBootstrapPhase, TorErrors> {
-        (*RUNTIME).lock().unwrap().block_on(async {
-            let mut ctl = self._ctl.borrow_mut();
-            let r = ctl
-                .as_mut()
-                .ok_or(TorErrors::BootStrapError("Unable to get mut".into()))?
-                .get_status()
-                .await?;
-            Ok(r)
-        })
+        (*RUNTIME).lock().unwrap().block_on(
+            async {
+                let mut ctl = self._ctl.borrow_mut();
+                let r = ctl
+                    .as_mut()
+                    .ok_or(TorErrors::BootStrapError("Unable to get mut".into()))?
+                    .get_status()
+                    .await?;
+                Ok(r)
+            }
+            .compat(),
+        )
     }
     /// take control conn and drop it.
     /// Closing the owned connection and causes tor daemon to shutdown
@@ -417,28 +429,34 @@ where
                     Ok(true)
                 },
             )
+            .compat()
             .await
             .map_err(|e| TorErrors::BootStrapError(String::from("Timeout waiting for boostrap")))?
-        };
+        }
+        .compat();
         Box::pin(future)
     }
     fn get_status(
         &mut self,
     ) -> Pin<Box<dyn Future<Output = Result<OwnedTorServiceBootstrapPhase, TorErrors>> + '_>> {
         // Wait for boostrap to be done
-        Box::pin(async move {
-            let input = self
-                .get_info("status/bootstrap-phase")
-                .await
-                .map_err(TorErrors::ControlConnectionError)?;
-            if input.trim().contains("TAG=done") {
-                Ok(OwnedTorServiceBootstrapPhase::Done)
-            } else {
-                Ok(OwnedTorServiceBootstrapPhase::Other(BootstrapPhase(
-                    input.trim().into(),
-                )))
+        Box::pin(
+            async move {
+                let input = self
+                    .get_info("status/bootstrap-phase")
+                    .compat()
+                    .await
+                    .map_err(TorErrors::ControlConnectionError)?;
+                if input.trim().contains("TAG=done") {
+                    Ok(OwnedTorServiceBootstrapPhase::Done)
+                } else {
+                    Ok(OwnedTorServiceBootstrapPhase::Other(BootstrapPhase(
+                        input.trim().into(),
+                    )))
+                }
             }
-        })
+            .compat(),
+        )
     }
     // dropping the control connection after having taken ownership of the node will cause the node
     // to shutdown
@@ -457,44 +475,58 @@ mod tests {
     #[test]
     #[serial(tor)]
     fn from_param_and_await_boostrap() {
-        (*RUNTIME).lock().unwrap().block_on(async {
-            let service: TorService = TorServiceParam {
-                socks_port: Some(19051),
-                data_dir: String::from("/tmp/torlib2"),
-                bootstrap_timeout_ms: Some(45000),
+        (*RUNTIME).lock().unwrap().block_on(
+            async {
+                let service: TorService = TorServiceParam {
+                    socks_port: Some(19051),
+                    data_dir: String::from("/tmp/torlib2"),
+                    bootstrap_timeout_ms: Some(45000),
+                }
+                .try_into()
+                .unwrap();
+                assert_eq!(service.socks_port, 19051);
+                assert_eq!(service.control_port.contains("127.0.0.1:"), true);
+                assert_eq!(service._handle.is_some(), true);
+                let mut control_conn = service
+                    .get_control_auth_conn(Some(handler))
+                    .compat()
+                    .await
+                    .unwrap();
+                let bootsraped = control_conn
+                    .wait_bootstrap(Some(20000))
+                    .compat()
+                    .await
+                    .unwrap();
+                assert_eq!(bootsraped, true);
+                control_conn.take_ownership().await.unwrap();
+                control_conn.shutdown();
+                let _ = service._handle.unwrap().join();
             }
-            .try_into()
-            .unwrap();
-            assert_eq!(service.socks_port, 19051);
-            assert_eq!(service.control_port.contains("127.0.0.1:"), true);
-            assert_eq!(service._handle.is_some(), true);
-            let mut control_conn = service.get_control_auth_conn(Some(handler)).await.unwrap();
-            let bootsraped = control_conn.wait_bootstrap(Some(20000)).await.unwrap();
-            assert_eq!(bootsraped, true);
-            control_conn.take_ownership().await.unwrap();
-            control_conn.shutdown();
-            let _ = service._handle.unwrap().join();
-        });
+            .compat(),
+        );
     }
 
     #[test]
     #[serial(tor)]
     fn bootstrap_timeout() {
-        (*RUNTIME).lock().unwrap().block_on(async {
-            let service: TorService = TorServiceParam {
-                socks_port: Some(19051),
-                data_dir: String::from("/tmp/torlib2"),
-                bootstrap_timeout_ms: Some(1000),
+        (*RUNTIME).lock().unwrap().block_on(
+            async {
+                let service: TorService = TorServiceParam {
+                    socks_port: Some(19051),
+                    data_dir: String::from("/tmp/torlib2"),
+                    bootstrap_timeout_ms: Some(1000),
+                }
+                .try_into()
+                .unwrap();
+                assert_eq!(service.socks_port, 19051);
+                assert_eq!(service.control_port.contains("127.0.0.1:"), true);
+                assert_eq!(service._handle.is_some(), true);
+                let mut control_conn = service.get_control_auth_conn(Some(handler)).await.unwrap();
+                let bootsraped = control_conn.wait_bootstrap(Some(500)).await;
+                assert_eq!(bootsraped.is_err(), true);
             }
-            .try_into()
-            .unwrap();
-            assert_eq!(service.socks_port, 19051);
-            assert_eq!(service.control_port.contains("127.0.0.1:"), true);
-            assert_eq!(service._handle.is_some(), true);
-            let mut control_conn = service.get_control_auth_conn(Some(handler)).await.unwrap();
-            let bootsraped = control_conn.wait_bootstrap(Some(500)).await;
-            assert_eq!(bootsraped.is_err(), true);
-        });
+            .compat(),
+        );
     }
 
     #[test]
@@ -510,14 +542,18 @@ mod tests {
         let client = utils::get_proxied_client(service.socks_port).unwrap();
 
         let mut owned_node = service.into_owned_node().unwrap();
-        (*RUNTIME).lock().unwrap().block_on(async {
-            let resp = client
-                .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
-                .send()
-                .await
-                .unwrap();
-            assert_eq!(resp.status(), 200);
-        });
+
+        (*RUNTIME).lock().unwrap().block_on(
+            async {
+                let resp = client
+                    .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
+                    .send()
+                    .await
+                    .unwrap();
+                assert_eq!(resp.status(), 200);
+            }
+            .compat(),
+        );
         // take ctl and drop it
         owned_node.shutdown().unwrap();
     }
@@ -586,10 +622,13 @@ mod tests {
             utils::reqwest::Url::parse(&format!("http://{}", service_key.onion_url)).unwrap();
         let _ = onion_url.set_port(Some(20011 as u16));
 
-        (*RUNTIME).lock().unwrap().block_on(async {
-            let resp = client.get(onion_url).send().await.unwrap();
-            assert_eq!(resp.status(), 200);
-        });
+        (*RUNTIME).lock().unwrap().block_on(
+            async {
+                let resp = client.get(onion_url).send().await.unwrap();
+                assert_eq!(resp.status(), 200);
+            }
+            .compat(),
+        );
         owned_node.shutdown().unwrap();
     }
 }
