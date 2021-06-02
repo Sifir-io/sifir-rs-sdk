@@ -21,11 +21,17 @@ impl Logger {
         }
         #[cfg(not(target_os = "android"))]
         {
-            logger::init();
+            let _ = logger::try_init();
         }
 
         log_panics::init(); // log panics rather than printing them
         info!("logging init");
         Logger {}
+    }
+}
+
+impl Default for Logger {
+    fn default() -> Self {
+        Logger::new()
     }
 }
