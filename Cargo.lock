@@ -1737,9 +1737,11 @@ dependencies = [
 name = "sifir-ios"
 version = "0.1.0"
 dependencies = [
+ "base64 0.13.0",
  "cargo-lipo",
  "cbindgen",
  "libc",
+ "logger",
  "serde",
  "serde_json",
  "tor",

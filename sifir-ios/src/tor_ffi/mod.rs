@@ -1,12 +1,15 @@
 use libc::{c_char, c_void};
+use serde_json::json;
 use std::ffi::{CStr, CString};
 use std::ops::{Deref, DerefMut};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 use std::time::Duration;
 use tor::{
+    hidden_service::{HiddenServiceDataHandler, HiddenServiceHandler},
     tcp_stream::{DataObserver, TcpSocksStream},
-    OwnedTorService, TorServiceParam,
+    OwnedTorService, TorHiddenService, TorHiddenServiceParam, TorServiceParam,
 };
+use logger;
 
 #[repr(C)]
 pub enum ResultMessage {
@@ -17,6 +20,12 @@ pub enum ResultMessage {
 pub struct BoxedResult<T> {
     pub result: Option<Box<T>>,
     pub message: ResultMessage,
+}
+
+#[no_mangle]
+/// Starts env logger
+pub extern "C" fn start_logger() {
+    logger::Logger::new();
 }
 
 #[no_mangle]
@@ -189,6 +198,76 @@ pub extern "C" fn tcp_stream_send_msg(
         }
     }
 }
+#[no_mangle]
+///# Safety
+/// Creates a Hidden service returning it's secret/public key
+pub extern "C" fn create_hidden_service(
+    owned_client: *mut OwnedTorService,
+    dst_port: u16,
+    hs_port: u16,
+) -> *mut BoxedResult<*mut c_char> {
+    assert!(!owned_client.is_null());
+    let owned = unsafe { &mut *owned_client };
+    let hidden_service = owned.create_hidden_service(TorHiddenServiceParam {
+        to_port: dst_port,
+        hs_port,
+        secret_key: None,
+    });
+    match hidden_service {
+        Ok(TorHiddenService {
+            onion_url,
+            secret_key,
+        }) => {
+            let json_payload = json!({ "onion_url": onion_url.to_string(), "secret_key": base64::encode(secret_key) });
+            Box::into_raw(Box::new(BoxedResult {
+                result: Some(Box::new(
+                    CString::new(json_payload.to_string()).unwrap().into_raw(),
+                )),
+                message: ResultMessage::Success,
+            }))
+        }
+        Err(e) => {
+            let message = format!("{:#?}", e);
+            Box::into_raw(Box::new(BoxedResult {
+                result: None,
+                message: ResultMessage::Error(CString::new(message).unwrap().into_raw()),
+            }))
+        }
+    }
+}
+#[no_mangle]
+///# Safety
+/// Starts an HTTP request server on dst_port calling the observer with data
+pub extern "C" fn start_http_hidden_service_handler(
+    dst_port: u16,
+    observer: Observer,
+) -> *mut BoxedResult<HiddenServiceHandler> {
+    match HiddenServiceHandler::new(dst_port) {
+        Ok(mut lsner) => match lsner.set_data_handler(observer) {
+            Ok(_) => {
+                let _ = lsner.start_http_listener();
+                Box::into_raw(Box::new(BoxedResult {
+                    result: Some(Box::new(lsner)),
+                    message: ResultMessage::Success,
+                }))
+            }
+            Err(e) => {
+                let message = format!("error setting data handler: {:#?}", e);
+                Box::into_raw(Box::new(BoxedResult {
+                    result: None,
+                    message: ResultMessage::Error(CString::new(message).unwrap().into_raw()),
+                }))
+            }
+        },
+        Err(e) => {
+            let message = format!("{:#?}", e);
+            Box::into_raw(Box::new(BoxedResult {
+                result: None,
+                message: ResultMessage::Error(CString::new(message).unwrap().into_raw()),
+            }))
+        }
+    }
+}
 
 #[no_mangle]
 ///# Safety
@@ -214,4 +293,11 @@ pub unsafe extern "C" fn shutdown_owned_TorService(owned_client: *mut OwnedTorSe
     assert!(!owned_client.is_null());
     let mut owned: Box<OwnedTorService> = Box::from_raw(owned_client);
     let _ = owned.shutdown();
+}
+#[no_mangle]
+///# Safety
+/// Destroy and release HiddenServiceHandler
+pub unsafe extern "C" fn destroy_hidden_service_handler(hs_handler: *mut HiddenServiceHandler) {
+    assert!(!hs_handler.is_null());
+    let _: Box<HiddenServiceHandler> = Box::from_raw(hs_handler);
 }

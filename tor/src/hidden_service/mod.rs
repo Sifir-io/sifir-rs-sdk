@@ -1,3 +1,4 @@
+use crate::tcp_stream::DataObserver;
 use crate::TorErrors;
 use crate::RUNTIME;
 use logger::log::*;
@@ -20,20 +21,15 @@ use tokio::sync::{Mutex, RwLock};
 use tokio::time::{timeout, Duration};
 use tokio_compat_02::FutureExt;
 
-type HiddenServiceDataHandler = Box<dyn DataObserver + Send + Sync + 'static>;
+pub type HiddenServiceDataHandler = Box<dyn DataObserver + Send + Sync + 'static>;
 
 pub struct HiddenServiceHandler {
     port: u16,
     data_handler: Arc<RwLock<Option<HiddenServiceDataHandler>>>,
 }
 
-pub trait DataObserver {
-    fn on_data(&self, data: String);
-    fn on_error(&self, data: String);
-}
-
 impl HiddenServiceHandler {
-    fn new(port: u16) -> Result<Self, TorErrors> {
+    pub fn new(port: u16) -> Result<Self, TorErrors> {
         // FIXME
         // shut down function ?
         // b64 data ?
