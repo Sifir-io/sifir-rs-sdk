@@ -55,7 +55,7 @@ impl HiddenServiceHandler {
         Ok(())
     }
 
-    pub fn start_http_listner(&mut self) -> Result<(), TorErrors> {
+    pub fn start_http_listener(&mut self) -> Result<(), TorErrors> {
         let cb_clone = self.data_handler.clone();
         let port = self.port;
         (*RUNTIME).lock().unwrap().spawn(async move {
@@ -95,9 +95,9 @@ impl HiddenServiceHandler {
                                     match e {
                                         // http parse expects new line to be read before sending it the buffer
                                         // so ignore this error here
-                                        httparse::Error::Token => {}
+                                        httparse::Error::Token => { trace!("got http parse token error, ignoring.")}
                                         _ => {
-                                            error!("Parsing error {:#?}", e);
+                                            error!("http Parsing error {:#?}", e);
                                             break;
                                         }
                                     }
@@ -113,11 +113,11 @@ impl HiddenServiceHandler {
                         let read_size = rx.read(&mut buffer[position..]).await.unwrap();
                         trace!("Read buffer size {} call number {}", read_size, position);
                         // break on some data but 0 data read (peer terminated connection)
-                        if (position >= 1 && read_size == 0) {
+                        if position >= 1 && read_size == 0 {
                             warn!("<- peer terminated connection detected");
                             break;
                         }
-                        position = position + read_size;
+                        position += read_size;
                     }
                     trace!("-- awaiting reading to end.");
 
@@ -138,6 +138,7 @@ impl HiddenServiceHandler {
                     };
                     trace!("-- parse body");
                     trace!("-> parse header");
+                    // FIXME a result of succesfull parsed headers here
                     let headers_map: Box<HashMap<String, String>> = Box::new(
                         req.headers
                             .into_iter()
@@ -159,16 +160,8 @@ impl HiddenServiceHandler {
                     let cb_option = cb_clone.write().await;
                     trace!("-> callback");
                     if let Some(ref mut cb) = cb_option.as_ref() {
-                        match req.method {
-                            Some(method) => {
-                                let cb_data = json!({ "headers": headers_map, "body": body,"method": req.method, "path": req.path, "version": req.version});
-                                cb.on_data(cb_data.to_string())
-                            }
-                            None => {
-                                error!("NONE for method");
-                                //cb.on_error(e.to_string())
-                            }
-                        }
+                        let cb_data = json!({ "headers": headers_map, "body": body,"method": req.method, "path": req.path, "version": req.version});
+                        cb.on_data(cb_data.to_string());
                     }
                     let response = b"HTTP/1.1 200 OK\r\n\r\n";
                     tx.write_all(response).await.unwrap();
@@ -219,6 +212,8 @@ mod tests {
 
         struct Observer {
             pub count: Arc<Mutex<u16>>,
+            // FIXME make this into a string and store data for assertions
+            // pub response: RefCel<String>,
         }
         impl DataObserver for Observer {
             fn on_data(&self, data: String) {
@@ -239,7 +234,7 @@ mod tests {
 
         let mut listner = HiddenServiceHandler::new(20000).unwrap();
         let _ = listner.set_data_handler(obv).unwrap();
-        listner.start_http_listner().unwrap();
+        listner.start_http_listener().unwrap();
 
         (*RUNTIME).lock().unwrap().block_on(
             async move {
@@ -262,6 +257,9 @@ mod tests {
             }
             .compat(),
         );
+
+        // FIXME how to acces Arc Mutex vale for testing
+        // assert_eq!(obv.count.into_inner().unwrap(), 1);
 
         owned_node.shutdown().unwrap();
     }

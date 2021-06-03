@@ -216,7 +216,7 @@ impl TryFrom<TorServiceParam> for TorService {
                     };
                     let data: Vec<&str> = t.split("PORT=").collect();
                     control_port = data[1].into();
-                    info!("Tor success with config port!");
+                    info!("success with config port {}!", control_port);
                     is_ready = true;
                 }
                 Err(e) => {
