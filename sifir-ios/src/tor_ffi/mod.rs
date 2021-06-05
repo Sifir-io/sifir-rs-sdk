@@ -36,9 +36,9 @@ pub extern "C" fn get_owned_TorService(
 ) -> *mut BoxedResult<OwnedTorService> {
     match catch_unwind(|| {
         assert!(!data_dir.is_null());
-        let dir_str: string = unsafe { cstr::from_ptr(data_dir) }
+        let dir_str: String = unsafe { CStr::from_ptr(data_dir) }
             .to_str()
-            .expect("could not get str from data_dir")
+            .expect("Could not get str from data_dir")
             .to_owned();
 
         println!(
@@ -210,21 +210,31 @@ pub extern "C" fn create_hidden_service(
     assert!(!owned_client.is_null());
     let owned = unsafe { &mut *owned_client };
     let hs_key = match secret_key.is_null() {
-        True => None,
-        False => {
-            let secret_key_str = unsafe { CStr::from_ptr(proxy) }
+        true => None,
+        false => {
+            let secret_key_str = unsafe { CStr::from_ptr(secret_key) }
                 .to_str()
                 .expect("Could not get str from proxy");
 
-            // Return on base64 parse error
-            let mut decoded_buff: [u8; 64] = [0; 64];
-            match base64::decode_config_slice(secret_key_str, base64::STANDARD, &mut decoded_buff) {
-                Some(_) => Some(decoded_buff),
-                Err(e) => {
-                    return Box::into_raw(Box::new(BoxedResult {
-                        result: None,
-                        message: ResultMessage::Error(CString::new(e.into()).unwrap().into_raw()),
-                    }))
+            if secret_key_str.len() < 1 {
+                None
+            } else {
+                // Return on base64 parse error
+                let mut decoded_buff: [u8; 64] = [0; 64];
+                match base64::decode_config_slice(
+                    secret_key_str,
+                    base64::STANDARD,
+                    &mut decoded_buff,
+                ) {
+                    Ok(_) => Some(decoded_buff),
+                    Err(e) => {
+                        return Box::into_raw(Box::new(BoxedResult {
+                            result: None,
+                            message: ResultMessage::Error(
+                                CString::new(format!("{}", e)).unwrap().into_raw(),
+                            ),
+                        }))
+                    }
                 }
             }
         }
