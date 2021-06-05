@@ -32,6 +32,14 @@ public final class OwnedTorService {
     }
     private static native String do_get_status(long self);
 
+    public final TorHiddenService create_hidden_service(int dst_port, int hs_port, String secret_key) throws Exception {
+        long ret = do_create_hidden_service(mNativeObj, dst_port, hs_port, secret_key);
+        TorHiddenService convRet = new TorHiddenService(InternalPointerMarker.RAW_PTR, ret);
+
+        return convRet;
+    }
+    private static native long do_create_hidden_service(long self, int dst_port, int hs_port, String secret_key) throws Exception;
+
     public synchronized void delete() {
         if (mNativeObj != 0) {
             do_delete(mNativeObj);

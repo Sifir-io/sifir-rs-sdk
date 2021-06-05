@@ -1724,6 +1724,7 @@ dependencies = [
 name = "sifir-android"
 version = "0.1.0"
 dependencies = [
+ "base64 0.13.0",
  "flapigen",
  "jni",
  "jni-sys",

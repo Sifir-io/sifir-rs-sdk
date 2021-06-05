@@ -1,3 +1,3 @@
 #![allow(non_snake_case)]
-pub mod flapigen;
-pub use flapigen::java_glue::*;
+pub mod ffi;
+pub use ffi::java_glue::*;

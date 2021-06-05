@@ -30,10 +30,6 @@ pub struct HiddenServiceHandler {
 
 impl HiddenServiceHandler {
     pub fn new(port: u16) -> Result<Self, TorErrors> {
-        // FIXME
-        // shut down function ?
-        // b64 data ?
-        // 500 status code on errors ?
         Ok(HiddenServiceHandler {
             port,
             data_handler: Arc::new(RwLock::new(None)),
@@ -59,12 +55,13 @@ impl HiddenServiceHandler {
                 Ipv4Addr::new(127, 0, 0, 1),
                 port,
             )))
-            .await
-            .unwrap();
+                .await
+                .unwrap();
             info!(
                 "Started HTTP listener & waiting for connection on port {}",
                 port
             );
+         loop{
             match listener.accept().await {
                 Ok((mut stream, addr)) => {
                     info!("New client connection established from addr {:?}", addr);
@@ -91,7 +88,7 @@ impl HiddenServiceHandler {
                                     match e {
                                         // http parse expects new line to be read before sending it the buffer
                                         // so ignore this error here
-                                        httparse::Error::Token => { trace!("got http parse token error, ignoring.")}
+                                        httparse::Error::Token => { trace!("got http parse token error, ignoring.") }
                                         _ => {
                                             error!("http Parsing error {:#?}", e);
                                             break;
@@ -167,11 +164,8 @@ impl HiddenServiceHandler {
                     error!("couldn't get client: {:?}", e)
                 }
             }
+        }
         });
-        Ok(())
-    }
-
-    pub fn shutdown(&mut self) -> Result<(), TorErrors> {
         Ok(())
     }
 }
@@ -230,7 +224,7 @@ mod tests {
 
         let mut listner = HiddenServiceHandler::new(20000).unwrap();
         let _ = listner.set_data_handler(obv).unwrap();
-        listner.start_http_listener().unwrap();
+        let _ = listner.start_http_listener();
 
         (*RUNTIME).lock().unwrap().block_on(
             async move {
