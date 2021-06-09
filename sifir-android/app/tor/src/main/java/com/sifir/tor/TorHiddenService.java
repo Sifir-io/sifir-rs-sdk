@@ -6,13 +6,19 @@ public final class TorHiddenService {
 
     private TorHiddenService() {}
 
-    public final HiddenServiceHandler start_http_handler(int dst_port, DataObserver cb) throws Exception {
-        long ret = do_start_http_handler(mNativeObj, dst_port, cb);
-        HiddenServiceHandler convRet = new HiddenServiceHandler(InternalPointerMarker.RAW_PTR, ret);
+    public final String get_onion_url() {
+        String ret = do_get_onion_url(mNativeObj);
 
-        return convRet;
+        return ret;
     }
-    private static native long do_start_http_handler(long self, int dst_port, DataObserver cb) throws Exception;
+    private static native String do_get_onion_url(long self);
+
+    public final String get_secret_b64() {
+        String ret = do_get_secret_b64(mNativeObj);
+
+        return ret;
+    }
+    private static native String do_get_secret_b64(long self);
 
     public synchronized void delete() {
         if (mNativeObj != 0) {

@@ -4,7 +4,10 @@ package com.sifir.tor;
 
 public final class HiddenServiceHandler {
 
-    private HiddenServiceHandler() {}
+    public HiddenServiceHandler(int dst_port, DataObserver cb) throws Exception {
+        mNativeObj = init(dst_port, cb);
+    }
+    private static native long init(int dst_port, DataObserver cb) throws Exception;
 
     public synchronized void delete() {
         if (mNativeObj != 0) {

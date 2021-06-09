@@ -18,10 +18,13 @@ foreign_callback!(callback DataObserver {
 // internally wrap passed the Boxed DataObserver Impl we receive from Java
 // with Observer so we can Send across threads
 unsafe impl Send for Observer {}
+
 unsafe impl Sync for Observer {}
+
 struct Observer {
     cb: Box<dyn DataObserver>,
 }
+
 impl DataObserver for Observer {
     fn on_data(&self, data: String) {
         self.cb.on_data(data);
@@ -34,18 +37,23 @@ impl DataObserver for Observer {
 /// Hiden Service Handler
 foreign_class!(class HiddenServiceHandler {
     self_type HiddenServiceHandler;
-    private constructor = empty;
+    constructor new(dst_port:u16,cb:Box<dyn DataObserver>)->Result<HiddenServiceHandler,String>{
+       let mut lsnr = HiddenServiceHandler::new(dst_port).map_err(|e| { format!("{:#?}",e) }).unwrap();
+       lsnr.set_data_handler(Observer { cb }).map_err(|e| { format!("{:#?}",e) }).unwrap();
+       let _ = lsnr.start_http_listener();
+       Ok(lsnr)
+    }
 });
 
 /// Tor Hidden Service, cannot be constructed directly
 foreign_class!(class TorHiddenService {
     self_type TorHiddenService;
     private constructor = empty;
-    fn start_http_handler(&mut self,dst_port:u16,cb:Box<dyn DataObserver>)->Result<HiddenServiceHandler,String>{
-       let mut lsnr = HiddenServiceHandler::new(dst_port).map_err(|e| { format!("{:#?}",e) }).unwrap();
-       lsnr.set_data_handler(Observer { cb }).map_err(|e| { format!("{:#?}",e) }).unwrap();
-       let _ = lsnr.start_http_listener();
-       Ok(lsnr)
+    fn get_onion_url(&self)->String{
+        this.onion_url.to_string()
+    }
+    fn get_secret_b64(&self)->String{
+        base64::encode(this.secret_key).into()
     }
 });
 
@@ -79,20 +87,26 @@ foreign_class!(class OwnedTorService {
     }
     fn create_hidden_service(&mut self,  dst_port: u16, hs_port: u16, secret_key: String) -> Result<TorHiddenService,String> {
         let hs_key = match secret_key.len() {
-            0 => None,
+            0 => Ok(None),
             _ => {
                 let mut decoded_buff:[u8;64] = [0;64];
-                base64::decode_config_slice(secret_key,base64::STANDARD,&mut decoded_buff)
-                        .map_err(|e| { format! ("{:#?}",e)} )
-                        .unwrap();
-                Some(decoded_buff)
+                base64::decode_config_slice(secret_key, base64::STANDARD, &mut decoded_buff)
+                    .map( |_| { Some(decoded_buff)})
             }
         };
-        this.create_hidden_service(TorHiddenServiceParam {
-            to_port: dst_port,
-            hs_port,
-            secret_key: hs_key.into(),
-        }).map_err(|e| { format! ("{:#?}",e)} )
+
+        match hs_key {
+            Ok(key) =>{
+                this.create_hidden_service(TorHiddenServiceParam {
+                    to_port: dst_port,
+                    hs_port,
+                    secret_key: key
+                }).map_err(|e| { format! ("{:#?}",e)})
+            },
+            Err(e)=> {
+              Err(format!("{:#?}",e))
+            }
+          }
     }
 });
 
