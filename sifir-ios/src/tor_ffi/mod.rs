@@ -269,6 +269,34 @@ pub extern "C" fn create_hidden_service(
 }
 #[no_mangle]
 ///# Safety
+/// Deletes a Hidden service
+pub extern "C" fn delete_hidden_service(
+    owned_client: *mut OwnedTorService,
+    onion: *const c_char,
+) -> *mut BoxedResult<()> {
+
+    assert!(!owned_client.is_null());
+    assert!(!onion.is_null());
+
+    let owned = unsafe { &mut *owned_client };
+    let onion_str = unsafe { CStr::from_ptr(onion) }.expect("Could not get onion from ptr");
+
+    match owned.delete_hidden_service(onion_str) {
+        Ok() => Box::into_raw(Box::new(BoxedResult {
+            result: (),
+            message: ResultMessage::Success,
+        })),
+        Err(e) => {
+            let message = format!("{:#?}", e);
+            Box::into_raw(Box::new(BoxedResult {
+                result: None,
+                message: ResultMessage::Error(CString::new(message).unwrap().into_raw()),
+            }))
+        }
+    }
+}
+#[no_mangle]
+///# Safety
 /// Starts an HTTP request server on dst_port calling the observer with data
 pub extern "C" fn start_http_hidden_service_handler(
     dst_port: u16,

@@ -320,7 +320,6 @@ impl OwnedTorService {
         let owned_result: Result<OwnedTorService, TorErrors> = param.try_into();
         owned_result
     }
-    // TODO check port is not already taken
     pub fn create_hidden_service(
         &mut self,
         param: TorHiddenServiceParam,
@@ -362,6 +361,27 @@ impl OwnedTorService {
                     onion_url,
                     secret_key,
                 })
+            }
+            .compat(),
+        )
+    }
+    pub fn delete_hidden_service(
+        &mut self,
+        onion: String,
+    ) -> Result<(), TorErrors> {
+        (*RUNTIME).lock().unwrap().block_on(
+            async {
+                let mut _ctl = self._ctl.borrow_mut();
+                let ctl = _ctl
+                    .as_mut()
+                    .ok_or(TorErrors::BootStrapError(String::from("Error mut lock")))?;
+
+                ctl.del_onion(&onion)
+                .await
+                .map_err(TorErrors::ControlConnectionError)?;
+
+                info!("Hidden serviec deleted !");
+                Ok(())
             }
             .compat(),
         )

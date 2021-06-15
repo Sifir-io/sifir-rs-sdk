@@ -40,6 +40,11 @@ public final class OwnedTorService {
     }
     private static native long do_create_hidden_service(long self, int dst_port, int hs_port, String secret_key) throws Exception;
 
+    public final void delete_hidden_service(String onion) throws Exception {
+        do_delete_hidden_service(mNativeObj, onion);
+    }
+    private static native void do_delete_hidden_service(long self, String onion) throws Exception;
+
     public synchronized void delete() {
         if (mNativeObj != 0) {
             do_delete(mNativeObj);

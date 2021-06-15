@@ -108,6 +108,9 @@ foreign_class!(class OwnedTorService {
             }
           }
     }
+    fn delete_hidden_service(&mut self,  onion: String) -> Result<(),String> {
+         this.delete_hidden_service(onion).map_err(|e| { format! ("{:#?}",e)})
+    }
 });
 
 /// TcpStream Android Interface
