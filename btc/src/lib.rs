@@ -619,9 +619,9 @@ mod tests {
         .do_not_spend_change()
         .enable_rbf();
 
-        let (psbt, _tx_details) = txn.finish().unwrap();
-        let (psbt_signed, finished) = sender_wallet.sign(psbt, None).unwrap();
-        assert!(finished);
-        let _txn_id = sender_wallet.broadcast(psbt_signed.extract_tx()).unwrap();
+        let (mut psbt, _tx_details) = txn.finish().unwrap();
+        let ok = sender_wallet.sign(&mut psbt, Default::default()).unwrap();
+        assert!(ok);
+        let _txn_id = sender_wallet.broadcast(psbt.extract_tx()).unwrap();
     }
 }
