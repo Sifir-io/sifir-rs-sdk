@@ -273,25 +273,21 @@ pub extern "C" fn create_hidden_service(
 pub extern "C" fn delete_hidden_service(
     owned_client: *mut OwnedTorService,
     onion: *const c_char,
-) -> *mut BoxedResult<()> {
+) -> *mut ResultMessage {
 
     assert!(!owned_client.is_null());
     assert!(!onion.is_null());
 
     let owned = unsafe { &mut *owned_client };
-    let onion_str = unsafe { CStr::from_ptr(onion) }.expect("Could not get onion from ptr");
+    let onion_str = unsafe { CStr::from_ptr(onion) }.to_str().expect("Could not obtain str from onion");
 
-    match owned.delete_hidden_service(onion_str) {
-        Ok() => Box::into_raw(Box::new(BoxedResult {
-            result: (),
-            message: ResultMessage::Success,
-        })),
+    match owned.delete_hidden_service(String::from(onion_str)) {
+        Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
         Err(e) => {
-            let message = format!("{:#?}", e);
-            Box::into_raw(Box::new(BoxedResult {
-                result: None,
-                message: ResultMessage::Error(CString::new(message).unwrap().into_raw()),
-            }))
+            let message = format!("{:?}", e);
+            Box::into_raw(Box::new(ResultMessage::Error(
+                CString::new(message).unwrap().into_raw(),
+            )))
         }
     }
 }
