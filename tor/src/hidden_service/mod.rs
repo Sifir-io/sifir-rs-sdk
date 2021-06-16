@@ -72,7 +72,7 @@ impl HiddenServiceHandler {
 
                     trace!("--> awaiting reading to end.");
                     loop {
-                        // check if http request is complete
+                        // drop header after checking http request is complete
                         // TODO: httpparse api means it has to be dropped to avoid RwLock gymnastics on the buffer
                         // Maybe it's more efficient to actually wrap buffer with an RwLock vs this drop and reparse ?
                         {
