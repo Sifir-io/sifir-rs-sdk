@@ -51,16 +51,16 @@ pub extern "C" fn derive_xprvs(
 
         let network_str = unsafe { CStr::from_ptr(network) }
             .to_str()
-            .expect("Could not get str from data_dir");
+            .expect("Could not get str from network");
         let derive_path_str = unsafe { CStr::from_ptr(derive_path) }
             .to_str()
-            .expect("Could not get str from data_dir");
+            .expect("Could not get str from derive_path");
         let password_srr = unsafe { CStr::from_ptr(password) }
             .to_str()
-            .expect("Could not get str from data_dir");
+            .expect("Could not get str from password_str");
         let mnemonic = unsafe { CStr::from_ptr(seed_phrase) }
             .to_str()
-            .expect("Could not get str from data_dir");
+            .expect("Could not get str from seed_phrase");
 
         let network = match network_str {
             "testnet" => Ok(Network::Testnet),
