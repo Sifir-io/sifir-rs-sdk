@@ -1,6 +1,6 @@
 use crate::bdk::descriptor::IntoWalletDescriptor;
 use crate::{sled, AddressIndex, Client, ElectrumBlockchain, Wallet};
-use crate::{DerivedBip39Xprvs, XprvsWithPaths};
+use crate::{DerivedBip39Xprvs, WalletDescriptors, XprvsWithPaths};
 pub use bdk::bitcoin::util::bip32::{
     ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, ExtendedPubKey, Fingerprint,
     IntoDerivationPath,
@@ -8,26 +8,75 @@ pub use bdk::bitcoin::util::bip32::{
 pub use bdk::bitcoin::{secp256k1, Address, Network, OutPoint, PrivateKey, Script, Txid};
 use bdk::keys::IntoDescriptorKey;
 use bdk::keys::{DerivableKey, DescriptorKey};
+use bdk::miniscript::descriptor::DescriptorType;
+use serde::{Deserialize, Serialize};
 use std::iter::Map;
 use std::ops::RangeFrom;
+use std::str::FromStr;
 
-pub struct MultiSigKey {
-    pub key: String,
-    pub position: u16,
+// FIXME MOVE To lib
+// #[repr(C)]
+#[derive(Debug, Serialize, Deserialize)]
+pub struct XpubsWithPaths(ExtendedPubKey, DerivationPath, Fingerprint);
+
+// #[repr(C)]
+#[derive(Debug, Serialize, Deserialize)]
+struct MultiSigWalletDescriptorTuples(Vec<XprvsWithPaths>, Vec<XpubsWithPaths>, Network);
+#[derive(Debug, Serialize, Deserialize)]
+struct MultiSignWalletCfg {
+    descriptors: MultiSigWalletDescriptorTuples,
+    // descriptorType: DescriptorType,
+    quorom: i32,
 }
-impl MultiSigKey {
-    pub fn new(key: String, position: u16) -> Self {
-        MultiSigKey { key, position }
+
+//FIXME here test this
+impl From<MultiSignWalletCfg> for WalletDescriptors {
+    fn from(
+        MultiSignWalletCfg {
+            descriptors,
+            quorom,
+        }: MultiSignWalletCfg,
+    ) -> Self {
+        let MultiSigWalletDescriptorTuples(xprv_vec, xpub_vec, network) = descriptors;
+        let xpubs = xpub_vec
+            .into_iter()
+            .map(|XpubsWithPaths(ex_key, path, fp)| {
+                ex_key
+                    .into_descriptor_key(
+                        Some((fp, path.clone())),
+                        "m/0".into_derivation_path().unwrap(),
+                    )
+                    .unwrap()
+            })
+            .collect();
+        let xprvs: Vec<DescriptorKey<bdk::miniscript::Segwitv0>> = xprv_vec
+            .into_iter()
+            .map(|XprvsWithPaths(ex_key, path, fp)| {
+                // Note: here use the path to apply to xprv, not full derivation path
+                (ex_key, "m/0".into_derivation_path().unwrap())
+                    .into_descriptor_key()
+                    .unwrap()
+            })
+            .collect();
+
+        let (multi_sig_desc, multi_key_map, _) =
+            // TODO accept input of descriptor type
+            bdk::descriptor!(wsh(sortedmulti_vec(quorom as usize, vec![xpubs, xprvs]))).unwrap();
+
+        WalletDescriptors {
+            external: multi_sig_desc.to_string_with_secret(&multi_key_map),
+            internal: String::from(""),
+            network,
+            public: multi_sig_desc.to_string(),
+        }
     }
 }
-
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::bdk::keys::ExtendedKey;
     use crate::bdk::miniscript::miniscript;
     use bdk::FeeRate;
-    use std::rc::Rc;
     use std::str::FromStr;
     use std::sync::Arc;
 
@@ -65,7 +114,6 @@ mod tests {
                 let mf = master_fp.clone();
                 let key1 = key.clone();
                 let key2 = key.clone();
-                let child_number = key.child_number.clone();
                 (
                     move || {
                         let path = (*p1.clone()).clone();
@@ -180,6 +228,7 @@ mod tests {
         // send back to  https://testnet-faucet.mempool.co/
         let rcvr_address = "mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt";
 
+        // 2-3 multi sig
         let adoni_wallet=        Wallet::new(
                     "wsh(sortedmulti(2,tprv8hgp5kTScgDMnq4Hf8SBDpruHTiCS74JuYwhWugXvAh2oeaog68fcAR6F56nsG5nF16R2BDKoZJRCw8NzGFLdzJo9YNC9n1FBwpAWn9a8jW/0/*,[2499b0ca/44\'/0\'/0\'/0]tpubDFC7PgEVXDMBT2uFt4GPzPr3U15oF442smXrpSFCWjqH7MF7MxVgRsEd66DJyRsaKoNqSPH1jyN29ibtrdDGouuPDGonk19YMQqD8VSbzTV/0/*,[8b903d3e/44\'/0\'/0\'/0]tpubDEPJiJWFHiv7t9VcmdYVWW98WsbgqKZ7z2GrPoDPaexEK8nr8gy68WxJzMrqpg6GhjhpY7tASsbEzgjx6YD5yBX8XdB6W54e2FV5A1gbwYB/0/*))#nnhu2nf2",
                     None,
@@ -257,9 +306,7 @@ mod tests {
 
         let (psbt, _tx_details) = txn.finish().unwrap();
         let (psbt_signed, finished) = janis_wallet.sign(psbt, None).unwrap();
-
         assert!(!finished);
-        // Try to make PSBT to spend ?
         let (psbt_dually_signed, finished) = albert_wallet.sign(psbt_signed, None).unwrap();
         assert!(finished);
     }

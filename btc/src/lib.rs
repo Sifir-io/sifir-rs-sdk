@@ -24,10 +24,12 @@ use rand::{thread_rng, RngCore};
 use serde::{Deserialize, Serialize};
 use serde_json;
 
+use bdk::miniscript::descriptor::DescriptorType;
 use std::str::FromStr;
 use thiserror::Error;
 
 #[derive(Debug, Serialize, Deserialize)]
+// Use that type
 pub struct WalletDescriptors {
     network: Network,
     external: String,
@@ -199,20 +201,6 @@ impl From<WalletCfg> for ElectrumSledWallet {
 ///
 /// Generate a new Bip39 mnemonic seed
 /// Derive num_child from provided derive_base
-///
-/// FIXME
-/// refactor this to
-/// let mnemonic = Mnemonic::from_phrase(...)?;
-/// let base_path = DerivationPath::from_str("m/0'");
-/// let descriptors = (0..1)
-///   .map(|index| ChildNumber::Normal { index }) // transform the index into a `ChildNumber`
-///   .map(|child| base_path.extend(&[child]))    // create the full path (base path + this child)
-///   .map(|full_path| bdk::descriptor!(wpkh((menmonic.clone(), full_path)))); // create a wpkh descriptor with the mnemonic and the full path
-///
-/// let (external_desc, ext_keymap, valid_network) = descriptors.next().unwrap()?;
-/// let (internal_desc, int_keymap, _) = descriptors.next().unwrap()?;
-/// SEE NOTES
-/// TODO - Maybe i just need to use the correct key fingerprint ? Ie the root ?
 impl DerivedBip39Xprvs {
     pub fn new(
         derive_base: DerivationPath,
@@ -239,20 +227,6 @@ impl DerivedBip39Xprvs {
         let xprv_master = master_key
             .into_xprv(network)
             .ok_or(BtcErrors::EmptyOption("xprv_master was empty".into()))?;
-        // derive n childs int/ext <derive_base>/n and cast from Vec<Result> - Result<Vec>
-        //let xprv_w_paths: Result<Vec<XprvsWithPaths>, BtcErrors> = derive_base
-        //    .normal_children()
-        //    .map(|child_path| -> Result<XprvsWithPaths, BtcErrors> {
-        //        // Path is relative to key, so here derive from master
-        //        let extended_priv = xprv_master.derive_priv(&secp, &child_path)?;
-        //        Ok(XprvsWithPaths(
-        //            extended_priv,
-        //            child_path,
-        //            xprv_master.fingerprint(&secp),
-        //        ))
-        //    })
-        //    .take(num_child)
-        //    .collect();
         let xprv_w_paths: Result<Vec<XprvsWithPaths>, BtcErrors> = (0..num_child)
             .map(|index| ChildNumber::Normal { index })
             .map(|path| derive_base.extend(&[path]))
@@ -275,14 +249,16 @@ impl DerivedBip39Xprvs {
     }
 }
 
-/// Create standard WalletDescriptors from XprivsPaths
 impl From<(Vec<XprvsWithPaths>, Network)> for WalletDescriptors {
     fn from((keys, network): (Vec<XprvsWithPaths>, Network)) -> Self {
         let mut descriptors = keys
             .iter()
             .map(|XprvsWithPaths(key, path, master_fp)| {
                 let descriptor_key = key
-                    .into_descriptor_key(Some((*master_fp, path.clone())), path.clone())
+                    .into_descriptor_key(
+                        Some((*master_fp, path.clone())),
+                        vec![key.child_number].into(),
+                    )
                     .unwrap();
                 // TODO define the type of descriptor
                 bdk::descriptor!(wpkh((descriptor_key))).unwrap()
