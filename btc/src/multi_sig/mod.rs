@@ -22,61 +22,61 @@ pub struct XpubsWithPaths(ExtendedPubKey, DerivationPath, Fingerprint);
 // #[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 struct MultiSigWalletDescriptorTuples(Vec<XprvsWithPaths>, Vec<XpubsWithPaths>, Network);
-#[derive(Debug, Serialize, Deserialize)]
-struct MultiSignWalletCfg {
-    descriptors: MultiSigWalletDescriptorTuples,
-    // descriptorType: DescriptorType,
-    quorom: i32,
-}
-
-//FIXME here test this
-impl From<MultiSignWalletCfg> for WalletDescriptors {
-    fn from(
-        MultiSignWalletCfg {
-            descriptors,
-            quorom,
-        }: MultiSignWalletCfg,
-    ) -> Self {
-        let MultiSigWalletDescriptorTuples(xprv_vec, xpub_vec, network) = descriptors;
-        let xpubs = xpub_vec
-            .into_iter()
-            .map(|XpubsWithPaths(ex_key, path, fp)| {
-                ex_key
-                    .into_descriptor_key(
-                        Some((fp, path.clone())),
-                        "m/0".into_derivation_path().unwrap(),
-                    )
-                    .unwrap()
-            })
-            .collect();
-        let xprvs: Vec<DescriptorKey<bdk::miniscript::Segwitv0>> = xprv_vec
-            .into_iter()
-            .map(|XprvsWithPaths(ex_key, path, fp)| {
-                // Note: here use the path to apply to xprv, not full derivation path
-                (ex_key, "m/0".into_derivation_path().unwrap())
-                    .into_descriptor_key()
-                    .unwrap()
-            })
-            .collect();
-
-        let (multi_sig_desc, multi_key_map, _) =
-            // TODO accept input of descriptor type
-            bdk::descriptor!(wsh(sortedmulti_vec(quorom as usize, vec![xpubs, xprvs]))).unwrap();
-
-        WalletDescriptors {
-            external: multi_sig_desc.to_string_with_secret(&multi_key_map),
-            internal: String::from(""),
-            network,
-            public: multi_sig_desc.to_string(),
-        }
-    }
-}
+//#[derive(Debug, Serialize, Deserialize)]
+//struct MultiSignWalletCfg {
+//    descriptors: MultiSigWalletDescriptorTuples,
+//    // descriptorType: DescriptorType,
+//    quorom: i32,
+//}
+//
+////FIXME here test this
+//impl From<MultiSignWalletCfg> for WalletDescriptors {
+//    fn from(
+//        MultiSignWalletCfg {
+//            descriptors,
+//            quorom,
+//        }: MultiSignWalletCfg,
+//    ) -> Self {
+//        let MultiSigWalletDescriptorTuples(xprv_vec, xpub_vec, network) = descriptors;
+//        let xpubs = xpub_vec
+//            .into_iter()
+//            .map(|XpubsWithPaths(ex_key, path, fp)| {
+//                ex_key
+//                    .into_descriptor_key(
+//                        Some((fp, path.clone())),
+//                        "m/0".into_derivation_path().unwrap(),
+//                    )
+//                    .unwrap()
+//            })
+//            .collect();
+//        let xprvs: Vec<DescriptorKey<bdk::miniscript::Segwitv0>> = xprv_vec
+//            .into_iter()
+//            .map(|XprvsWithPaths(ex_key, path, fp)| {
+//                // Note: here use the path to apply to xprv, not full derivation path
+//                (ex_key, "m/0".into_derivation_path().unwrap())
+//                    .into_descriptor_key()
+//                    .unwrap()
+//            })
+//            .collect();
+//
+//        let (multi_sig_desc, multi_key_map, _) =
+//            // TODO accept input of descriptor type
+//            bdk::descriptor!(wsh(sortedmulti_vec(quorom as usize, vec![xpubs, xprvs]))).unwrap();
+//
+//        WalletDescriptors {
+//            external: multi_sig_desc.to_string_with_secret(&multi_key_map),
+//            internal: String::from(""),
+//            network,
+//            public: multi_sig_desc.to_string(),
+//        }
+//    }
+//}
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::bdk::keys::ExtendedKey;
     use crate::bdk::miniscript::miniscript;
-    use bdk::FeeRate;
+    use bdk::{FeeRate, SignOptions};
     use std::str::FromStr;
     use std::sync::Arc;
 
@@ -304,10 +304,14 @@ mod tests {
         .fee_rate(FeeRate::from_sat_per_vb(1.0))
         .enable_rbf();
 
-        let (psbt, _tx_details) = txn.finish().unwrap();
-        let (psbt_signed, finished) = janis_wallet.sign(psbt, None).unwrap();
+        let (mut psbt, _tx_details) = txn.finish().unwrap();
+        let finished = janis_wallet
+            .sign(&mut psbt, SignOptions::default())
+            .unwrap();
         assert!(!finished);
-        let (psbt_dually_signed, finished) = albert_wallet.sign(psbt_signed, None).unwrap();
+        let finished = albert_wallet
+            .sign(&mut psbt, SignOptions::default())
+            .unwrap();
         assert!(finished);
     }
 }

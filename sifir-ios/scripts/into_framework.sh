@@ -20,7 +20,6 @@ working_dir="../output/$target/framework/$framework_name.framework";
 mkdir -p "$working_dir/Headers";
 mkdir -p "$working_dir/Modules";
 \cp -f "../output/sifir-tor.h" "$working_dir/Headers/$framework_name.h"
-\cp -f "../output/sifir_typedef.h" "$working_dir/Headers/sifir_typedef.h"
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 lipo -create "../output/$target/universal/libsifir_ios.a" -output "$working_dir/$framework_name"
@@ -60,6 +59,7 @@ HERE
 cat <<HERE > "$working_dir/Modules/module.modulemap"
 framework module "$framework_name" {
     header "$framework_name.h"
+    header "sifir_typedef.h"
     export *
 }
 HERE
