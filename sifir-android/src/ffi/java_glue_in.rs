@@ -1,3 +1,4 @@
+use btc::*;
 use jni_sys::*;
 use logger::{log, Logger};
 use serde::Serialize;
@@ -8,6 +9,7 @@ use tor::{
     BootstrapPhase, OwnedTorService, OwnedTorServiceBootstrapPhase, TorHiddenService,
     TorHiddenServiceParam, TorServiceParam,
 };
+use serde_json::json;
 
 /// Java callback interface for DataObserver callback used in TcpStreams, HiddenService etc..
 foreign_callback!(callback DataObserver {
@@ -151,7 +153,7 @@ foreign_class!(class DerivedBip39Xprvs{
         let wallet_desc = DerivedBip39Xprvs::new(
             derive_path.into_derivation_path().map_err(|e| { format!("{:#?}",e)}).unwrap(),
             network,
-            num_child,
+            num_child as u32,
             Some(password),
             match mnemonic.len() {
                 x if x > 0 => Some(mnemonic),
@@ -187,8 +189,7 @@ foreign_class!(class ElectrumSledWallet {
         this.get_balance().map_err(|e| { format!("{:#?}",e)})
     }
     fn get_new_address(&mut self)->Result<String,String>{
-        let address = this.get_address(AddressIndex::New).map_err(|e| { format!("{:#?}",e)}).unwrap();
-        serde_json::to_string(&address).map_err(|e| { format!("{:#?}",e)})
+        this.get_address(AddressIndex::New).map_err(|e| { format!("{:#?}",e)}).map(|address| format!("{}",address))
     }
     fn sync(&mut self,max_address_count:u32)-> Result<(),String> {
         struct SifirWallet {};
