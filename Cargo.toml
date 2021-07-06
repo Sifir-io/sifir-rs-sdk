@@ -4,10 +4,10 @@
 
 members =[
     "tor",
-    "btc",
     "utils",
     "sifir-android",
-    "sifir-ios"
+    "sifir-ios",
+    "logger"
 ]
 
 [profile.dev]

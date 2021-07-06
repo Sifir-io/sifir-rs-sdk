@@ -7,21 +7,25 @@ edition = "2018"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-tokio = { version= "0.3", features = ["net","rt","process","rt-multi-thread","time","sync"] }
+tokio = { version= "1.4", features = ["net","rt","process","rt-multi-thread","time","sync"] }
+logger = { path = "../logger" }
 libtor = { version= "45.8.0+0.4.5.8", features=["vendored-openssl"] }
-torut = { version = "0.1.7", features=["control","v3","vendored_openssl"] }
+torut = { version = "0.1.9", features=["control","v3","vendored_openssl"] }
 anyhow = "1.0.33"
 serde = { version="1.0.117", features = ["derive"]}
+serde_json = "1.0.64"
 lazy_static = "1.4.0"
 futures = { version="0.3.8", default-features = false}
 socks = { version = "0.3.3"}
 base64 = "0.13.0"
 thiserror = "1.0.24"
+num_cpus = "1.0"
+tokio-compat-02 = "0.2"
+httparse = "1.4.1"
 
 [dev-dependencies]
 serial_test = "*"
 utils = { path = "../utils" }
-tokio = { version= "0.3", features = ["net","rt","rt-multi-thread","process"] }
 
 
 [[example]]
