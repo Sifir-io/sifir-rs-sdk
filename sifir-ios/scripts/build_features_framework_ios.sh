@@ -20,9 +20,13 @@ echo "---------------";
 echo "---------------";
 
 # Build local (+ FFI)
-SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo build -p sifir-ios --release --features "$features";
-retVal=$?
-[ ! $retVal -eq 0 ] && exit 1;
+# TODO Seems like this doesn't work for libtor on latest MacOs, something about catalyst ?
+# Replicate by running this command and checking config.log for the error
+# For now we're iOS focused so it's ok
+#SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo build -p sifir-ios --release --features "$features";
+#retVal=$?
+#[ ! $retVal -eq 0 ] && exit 1;
+
 SIFIR_CBINDGEN_OUTPUT_FILENAME="$framework_name.h" cargo lipo -p sifir-ios --release --features "$features";
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
@@ -45,6 +49,10 @@ working_dir="../output/${framework_name}/target/framework/$framework_name.framew
 mkdir -p "$working_dir/Headers";
 mkdir -p "$working_dir/Modules";
 \cp -f "../output/${framework_name}.h" "$working_dir/Headers/$framework_name.h"
+retVal=$?
+[ ! $retVal -eq 0 ] && exit 1;
+
+\cp -f "../sifir-typedef.h" "$working_dir/Headers/sifir-typedef.h"
 retVal=$?
 [ ! $retVal -eq 0 ] && exit 1;
 
@@ -82,6 +90,7 @@ HERE
 cat <<HERE > "$working_dir/Modules/module.modulemap"
 framework module "$framework_name" {
     header "$framework_name.h"
+    header "sifir-typedef.h"
     export *
 }
 HERE
