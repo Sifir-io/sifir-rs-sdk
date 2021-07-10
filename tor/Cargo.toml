@@ -9,7 +9,7 @@ edition = "2018"
 [dependencies]
 tokio = { version= "1.4", features = ["net","rt","process","rt-multi-thread","time","sync"] }
 logger = { path = "../logger" }
-libtor = { version= "45.8.0+0.4.5.8", features=["vendored-openssl"] }
+libtor = { version= "46.5.0+0.4.6.5", features=["vendored-openssl"] }
 torut = { version = "0.1.9", features=["control","v3","vendored_openssl"] }
 anyhow = "1.0.33"
 serde = { version="1.0.117", features = ["derive"]}
@@ -27,10 +27,5 @@ httparse = "1.4.1"
 serial_test = "*"
 utils = { path = "../utils" }
 
-
 [[example]]
 name = "hs_bind"
-#required-features = ["cli-utils", "esplora"]
-#[lib]
-#crate-type = ["staticlib", "cdylib"]
-#crate-type = ["lib", "cdylib"]

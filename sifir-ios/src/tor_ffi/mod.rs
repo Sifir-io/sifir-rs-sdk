@@ -334,14 +334,6 @@ pub unsafe extern "C" fn tcp_stream_destroy(stream: *mut TcpSocksStream) {
     let _ = Box::from_raw(stream);
 }
 
-#[no_mangle]
-///# Safety
-/// Destroy a cstr
-pub unsafe extern "C" fn destroy_cstr(c_str: *mut c_char) {
-    assert!(!c_str.is_null());
-    let _ = Box::from_raw(c_str);
-}
-
 //
 #[no_mangle]
 ///# Safety

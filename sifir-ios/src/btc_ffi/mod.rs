@@ -2,7 +2,6 @@ use crate::util::*;
 use btc::*;
 use libc::{c_char, c_void};
 use serde_json::json;
-use std::borrow::Borrow;
 use std::ffi::{CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
 
@@ -70,8 +69,8 @@ pub extern "C" fn derive_xprvs(
         }
         .unwrap();
 
-        let num_child = match num_child {
-            x if x >= 2 => x,
+        let num_child: u32 = match num_child {
+            x if x >= 2 => x as u32,
             _ => 2,
         };
 
@@ -143,8 +142,7 @@ pub extern "C" fn get_electrum_wallet_new_address(
     let matcher = AssertUnwindSafe(wallet);
     unwind_into_boxed_result!({
         let address = matcher.get_address(AddressIndex::New).unwrap();
-        let json = serde_json::to_string(&address).unwrap();
-        CString::new(json).unwrap().into_raw()
+        CString::new(format!("{}",address)).unwrap().into_raw()
     })
 }
 
@@ -188,13 +186,6 @@ pub extern "C" fn create_tx(
         let txn_json = json!({"partiallySignedPsbt": pp, "txnDetails" : txn});
         CString::new(txn_json.to_string()).unwrap().into_raw()
     })
-}
-#[no_mangle]
-///# Safety
-/// Destroy a cstr
-pub unsafe extern "C" fn destroy_cstr(c_str: *mut c_char) {
-    assert!(!c_str.is_null());
-    let _ = Box::from_raw(c_str);
 }
 
 #[no_mangle]

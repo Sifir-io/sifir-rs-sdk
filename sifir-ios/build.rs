@@ -10,7 +10,7 @@ fn main() {
         .with_language(C)
         .with_define("feature", "tor_daemon", "TOR_DAEMON")
         .with_define("feature", "btc_wallet", "BTC_WALLET")
-        .with_include("./sifir-types.h")
+        .with_include("./sifir-typedef.h")
         .generate()
         .expect("Unable to generate bindings!!")
         .write_to_file(format!("./output/{}", outputname));
