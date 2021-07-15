@@ -3,11 +3,12 @@ use std::env;
 use std::path::Path;
 
 fn main() {
-    let outputname = env::var("SIFIR_ANDROID_JAVA_DIR").unwrap_or(String::from("tor"));
+    let outputname =
+        env::var("SIFIR_ANDROID_JAVA_DIR").expect("Missing SIFIR_ANDROID_JAVA_DIR env for target");
     setup_java(outputname);
 }
 fn setup_java(target: String) {
-    println!("Generate tor daemon bindings...");
+    println!("Generate bindings...");
     let in_src = Path::new("src/ffi/").join("java_glue_in.rs");
     let out_src = Path::new("src/ffi/").join("java_glue.rs");
     //ANCHOR: config
