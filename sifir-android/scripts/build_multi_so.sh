@@ -1,6 +1,13 @@
 #! /bin/bash
 cd ..
 OS=`uname`
+export SIFIR_ANDROID_JAVA_DIR=btc_tor
+
+target_dir="./app/tor/src/main/java/com/sifir/$SIFIR_ANDROID_JAVA_DIR";
+mkdir -p "$target_dir";
+retVal=$?
+[ ! $retVal -eq 0 ] && exit 1;
+
 if [ "$OS" = "Darwin" ]
 then
   echo "building apple darwin x86_64 lib"
