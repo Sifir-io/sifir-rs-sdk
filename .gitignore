@@ -8,3 +8,4 @@ sifir-android/outputs/**
 sifir-ios/outputs/**
 sifir-ios/scripts/custom/**
 ./sifir-android/src/ffi/java_glue.rs
+./sifir-android/outputs/aar/**
