@@ -11,7 +11,7 @@ targets=("i686-linux-android" "x86"  "armv7-linux-androideabi" "armeabi-v7a" "aa
 test_targets=("x86_64-unknown-linux-gnu" "x86_64");
 libfile="libsifir_android.so";
 
-# Copy lib targets to respevtive android project directories 
+# Copy lib targets to respevtive android project directories
 for ((i=0; i<${#targets[@]}; i+=2)); do
     libpath="../../target/${targets[i]}/release/$libfile";
     if [ ! -f "$libpath" ]; then
@@ -43,7 +43,7 @@ done;
 echo "Copied all binaries...";
 
 # Build AAR
-cd ../app && ./gradlew assembleRelease
+cd ../app && ./gradlew assembleRelease --info
 [ $retVal -ne 0 ] && echo "[ERROR] Building AAR" && exit 1;
 cd ../scripts
 \cp -rf ../app/tor/build/outputs/aar ../outputs/

@@ -10,4 +10,4 @@ sifir-ios/scripts/custom/**a
 # android builds
 sifir-android/src/ffi/java_glue.rs
 sifir-android/outputs/aar/**
-#sifir-android/app/tor/src/main/java/com/sifir/**
+sifir-android/app/tor/src/main/java/com/sifir/**
