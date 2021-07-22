@@ -365,10 +365,7 @@ impl OwnedTorService {
             .compat(),
         )
     }
-    pub fn delete_hidden_service(
-        &mut self,
-        onion: String,
-    ) -> Result<(), TorErrors> {
+    pub fn delete_hidden_service(&mut self, onion: String) -> Result<(), TorErrors> {
         (*RUNTIME).lock().unwrap().block_on(
             async {
                 let mut _ctl = self._ctl.borrow_mut();
@@ -377,8 +374,8 @@ impl OwnedTorService {
                     .ok_or(TorErrors::BootStrapError(String::from("Error mut lock")))?;
 
                 ctl.del_onion(&onion)
-                .await
-                .map_err(TorErrors::ControlConnectionError)?;
+                    .await
+                    .map_err(TorErrors::ControlConnectionError)?;
 
                 info!("Hidden serviec deleted !");
                 Ok(())

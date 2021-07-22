@@ -33,7 +33,7 @@ use thiserror::Error;
 pub struct WalletDescriptors {
     network: Network,
     external: String,
-    internal: String,
+    internal: Option<String>,
     public: String,
 }
 #[derive(Debug, Serialize, Deserialize)]
@@ -157,13 +157,14 @@ impl From<WalletCfg> for ElectrumMemoryWallet {
                 .as_str()
                 .into_wallet_descriptor(&secp, cfg.descriptors.network)
                 .unwrap(),
-            Some(
-                cfg.descriptors
-                    .internal
-                    .as_str()
-                    .into_wallet_descriptor(&secp, cfg.descriptors.network)
-                    .unwrap(),
-            ),
+            match cfg.descriptors.internal {
+                Some(desc) => Some(
+                    desc.as_str()
+                        .into_wallet_descriptor(&secp, cfg.descriptors.network)
+                        .unwrap(),
+                ),
+                None => None,
+            },
             cfg.descriptors.network,
             MemoryDatabase::new(),
             ElectrumBlockchain::from(Client::new("ssl://electrum.blockstream.info:60002").unwrap()),
@@ -183,13 +184,14 @@ impl From<WalletCfg> for ElectrumSledWallet {
                 .as_str()
                 .into_wallet_descriptor(&secp, cfg.descriptors.network)
                 .unwrap(),
-            Some(
-                cfg.descriptors
-                    .internal
-                    .as_str()
-                    .into_wallet_descriptor(&secp, cfg.descriptors.network)
-                    .unwrap(),
-            ),
+            match cfg.descriptors.internal {
+                Some(desc) => Some(
+                    desc.as_str()
+                        .into_wallet_descriptor(&secp, cfg.descriptors.network)
+                        .unwrap(),
+                ),
+                None => None,
+            },
             cfg.descriptors.network,
             tree,
             ElectrumBlockchain::from(Client::new("ssl://electrum.blockstream.info:60002").unwrap()),
@@ -270,7 +272,7 @@ impl From<(Vec<XprvsWithPaths>, Network)> for WalletDescriptors {
 
         WalletDescriptors {
             external: external_desc.to_string_with_secret(&ext_keymap),
-            internal: internal_desc.to_string_with_secret(&int_keymap),
+            internal: Some(internal_desc.to_string_with_secret(&int_keymap)),
             network,
             public: external_desc.to_string(),
         }

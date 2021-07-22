@@ -142,7 +142,7 @@ pub extern "C" fn get_electrum_wallet_new_address(
     let matcher = AssertUnwindSafe(wallet);
     unwind_into_boxed_result!({
         let address = matcher.get_address(AddressIndex::New).unwrap();
-        CString::new(format!("{}",address)).unwrap().into_raw()
+        CString::new(format!("{}", address)).unwrap().into_raw()
     })
 }
 
