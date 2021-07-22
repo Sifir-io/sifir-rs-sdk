@@ -46,11 +46,11 @@ pub struct WalletCfg {
     // server_uri: Option<String>
 }
 
-// #[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct XprvsWithPaths(ExtendedPrivKey, DerivationPath, Fingerprint);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct XpubsWithPaths(ExtendedPubKey, DerivationPath, Fingerprint);
 
-// #[repr(C)]
 #[derive(Debug, Serialize, Deserialize)]
 pub struct DerivedBip39Xprvs {
     phrase: String,
@@ -200,7 +200,6 @@ impl From<WalletCfg> for ElectrumSledWallet {
     }
 }
 
-///
 /// Generate a new Bip39 mnemonic seed
 /// Derive num_child from provided derive_base
 impl DerivedBip39Xprvs {
@@ -276,6 +275,15 @@ impl From<(Vec<XprvsWithPaths>, Network)> for WalletDescriptors {
             network,
             public: external_desc.to_string(),
         }
+    }
+}
+
+impl From<(XprvsWithPaths, Network)> for XpubsWithPaths {
+    fn from((key, network): (XprvsWithPaths, Network)) -> Self {
+        let XprvsWithPaths(xprv, path, fp) = key;
+        let ex_xpub: ExtendedKey<miniscript::Segwitv0> = xprv.into_extended_key().unwrap();
+        let xpub = ex_xpub.into_xpub(network, &secp256k1::Secp256k1::new());
+        XpubsWithPaths(xpub, path, fp)
     }
 }
 

@@ -1,4 +1,7 @@
 use crate::util::*;
+use bdk::bitcoin::consensus::encode::{deserialize, serialize, serialize_hex};
+use bdk::SignOptions;
+use btc::multi_sig::*;
 use btc::*;
 use libc::{c_char, c_void};
 use serde_json::json;
@@ -145,6 +148,17 @@ pub extern "C" fn get_electrum_wallet_new_address(
         CString::new(format!("{}", address)).unwrap().into_raw()
     })
 }
+// TODO move this
+struct SifirWallet {}
+impl Progress for SifirWallet {
+    fn update(&self, progress: f32, message: Option<String>) -> Result<(), bdk::Error> {
+        println!(
+            "ios ffi sync progress is {} and message {:?}, TODO THIS TO OBSERVER",
+            progress, message
+        );
+        Ok(())
+    }
+}
 
 #[no_mangle]
 pub extern "C" fn sync_electrum_wallet(
@@ -154,16 +168,6 @@ pub extern "C" fn sync_electrum_wallet(
     let wallet = unsafe { &mut *electrum_wallet };
     let matcher = AssertUnwindSafe(wallet);
     unwind_into_boxed_result!({
-        struct SifirWallet {};
-        impl Progress for SifirWallet {
-            fn update(&self, progress: f32, message: Option<String>) -> Result<(), bdk::Error> {
-                println!(
-                    "ios ffi sync progress is {} and message {:?}, TODO THIS TO OBSERVER",
-                    progress, message
-                );
-                Ok(())
-            }
-        };
         let _ = matcher
             .sync(SifirWallet {}, Some(max_address_count))
             .unwrap();
@@ -172,6 +176,7 @@ pub extern "C" fn sync_electrum_wallet(
 }
 
 /// Generates a finalized txn from CreateTxn json
+/// returns json { psbt: base64, txnDetails: string }
 #[no_mangle]
 pub extern "C" fn create_tx(
     wallet: *mut ElectrumSledWallet,
@@ -183,8 +188,97 @@ pub extern "C" fn create_tx(
         let txn_str = required_str_from_cchar_ptr!(tx);
         let create_txn: CreateTx = serde_json::from_str(txn_str).unwrap();
         let (pp, txn) = create_txn.into_wallet_txn(&matcher).unwrap();
-        let txn_json = json!({"partiallySignedPsbt": pp, "txnDetails" : txn});
+        let txn_json = json!({"psbt": base64::encode(serialize(&pp)), "txnDetails" : txn});
         CString::new(txn_json.to_string()).unwrap().into_raw()
+    })
+}
+
+/// Turns json of multi_sig_confg into WalletDescriptors JSON that be used with wallet_cfg and electrum_wallet_from_wallet_cfg
+///  MultiSigConf shouldb passed as json:
+///{
+///  "descriptors": [
+///    {
+///      "Xprv": [
+///        "tprv8hb2jMkXPyzimyaTaQ9tTH2xj7CcQENS3uMdNptCyGmDgSbFA2q7Zfpyjs3kf96Ecmascxp2bRg1ztSXGGY3jhzT1N5chXgHUcRwWAAh7kY",
+///        "m/0",
+///        "ff31a959"
+///      ]
+///    },
+///    {
+///      "Xpub": [
+///        "tpubDFSuJXy4vxC6vX3o1yNZjmdR7T7qS2FgbtqhHSvjNMjyXLHNJk9XzTqCPbVrbevbYyasY6wnS96s5Er4xkNosm3pcuyFH9LUxPUavJ2EZSC",
+///        "m/44'/0'/0'/0",
+///        "77306a4c"
+///      ]
+///    },
+///    {
+///      "Xpub": [
+///        "tpubDEYM383BbDXgPSpGmBWcdDCDo5HbREUBPVeUuyypBXpyQsMGykfGA2AURtuHbaN7ktrcbyct665m6VbtyQKsQD17Vp7yavVwdyGQ87659RR",
+///        "m/44'/0'/0'/0",
+///        "d22d870c"
+///      ]
+///    }
+///  ],
+///  "network": "testnet",
+///  "quorom": 2
+///}
+///
+#[no_mangle]
+pub extern "C" fn descriptors_from_multi_sig_conf(
+    mutli_sig_conf_json: *const c_char,
+) -> *mut BoxedResult<*mut c_char> {
+    unwind_into_boxed_result!({
+        let multi_sig_conf = required_str_from_cchar_ptr!(mutli_sig_conf_json);
+        let wallet_desc: WalletDescriptors = serde_json::from_str::<MultiSigCfg>(multi_sig_conf)
+            .unwrap()
+            .into();
+        let json = serde_json::to_string(&wallet_desc).unwrap();
+        CString::new(json).unwrap().into_raw()
+    })
+}
+
+#[no_mangle]
+pub extern "C" fn sign_psbt(
+    electrum_wallet: *mut ElectrumSledWallet,
+    psbt_base64: *const c_char,
+) -> *mut BoxedResult<*mut c_char> {
+    let psbt_str = required_str_from_cchar_ptr!(psbt_base64);
+    let wallet = unsafe { &mut *electrum_wallet };
+    let matcher = AssertUnwindSafe(wallet);
+
+    unwind_into_boxed_result!({
+        let mut psbt = deserialize(&base64::decode(&psbt_str).unwrap()).unwrap();
+        let finished = matcher.sign(&mut psbt, SignOptions::default()).unwrap();
+        let json =
+            json!({"psbt" : base64::encode(serialize(&psbt)).to_string(), "finished": finished});
+        CString::new(json.to_string()).unwrap().into_raw()
+    })
+}
+/// TODO broadcast_pbst(base64 pbst) -> txnid
+
+/// Convert XprvsWithPaths to XpubsWithPaths
+#[no_mangle]
+pub extern "C" fn xprvs_w_paths_to_xpubs_w_paths(
+    vec_xprvs_with_paths_json: *const c_char,
+    network: *const c_char,
+) -> *mut BoxedResult<*mut c_char> {
+    unwind_into_boxed_result!({
+        let xprvspaths_str = required_str_from_cchar_ptr!(vec_xprvs_with_paths_json);
+        let network_str = required_str_from_cchar_ptr!(network);
+        let network = match network_str {
+            "testnet" => Ok(Network::Testnet),
+            "mainnet" => Ok(Network::Bitcoin),
+            "bitcoin" => Ok(Network::Bitcoin),
+            _ => Err("Invalid network passed"),
+        }
+        .unwrap();
+        let xpubs_with_paths: XpubsWithPaths = (
+            serde_json::from_str::<XprvsWithPaths>(xprvspaths_str).unwrap(),
+            network,
+        )
+            .into();
+        let json = serde_json::to_string(&xpubs_with_paths).unwrap();
+        CString::new(json).unwrap().into_raw()
     })
 }
 

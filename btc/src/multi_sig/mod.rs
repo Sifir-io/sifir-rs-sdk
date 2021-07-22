@@ -1,30 +1,28 @@
 use crate::bdk::descriptor::IntoWalletDescriptor;
 use crate::{sled, AddressIndex, Client, ElectrumBlockchain, Wallet};
 use crate::{
-    DerivedBip39Xprvs, ElectrumMemoryWallet, ElectrumSledWallet, WalletDescriptors, XprvsWithPaths,
+    DerivedBip39Xprvs, ElectrumMemoryWallet, ElectrumSledWallet, WalletDescriptors, XprvsWithPaths, XpubsWithPaths
 };
 pub use bdk::bitcoin::util::bip32::{
     ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, ExtendedPubKey, Fingerprint,
     IntoDerivationPath,
 };
 pub use bdk::bitcoin::{secp256k1, Address, Network, OutPoint, PrivateKey, Script, Txid};
-use bdk::keys::{IntoDescriptorKey,DerivableKey, DescriptorKey};
+use bdk::keys::{DerivableKey, DescriptorKey, IntoDescriptorKey};
 use serde::{Deserialize, Serialize};
 use std::iter::Map;
 use std::ops::RangeFrom;
 use std::str::FromStr;
 
-#[derive(Debug, Serialize, Deserialize)]
-pub struct XpubsWithPaths(ExtendedPubKey, DerivationPath, Fingerprint);
 
 #[derive(Debug, Serialize, Deserialize)]
-enum MultiSigKey {
+pub enum MultiSigKey {
     Xpub(XpubsWithPaths),
     Xprv(XprvsWithPaths),
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-struct MultiSigCfg {
+pub struct MultiSigCfg {
     descriptors: Vec<MultiSigKey>,
     network: Network,
     quorom: i32,
@@ -80,7 +78,6 @@ mod tests {
     use crate::WalletCfg;
     use bdk::{FeeRate, SignOptions};
     use std::str::FromStr;
-    use std::sync::Arc;
 
     struct SifirWallet {} // TODO SifirWallet<T=WalletType>
     impl bdk::blockchain::Progress for SifirWallet {
@@ -134,7 +131,6 @@ mod tests {
         let (andriana_xpub, andriana_xprv) = xpub_xprv_tuple.next().unwrap();
         let (jose_xpub, jose_xprv) = xpub_xprv_tuple.next().unwrap();
         let (ahmed_xpub, ahmed_xprv) = xpub_xprv_tuple.next().unwrap();
-
         // 2. Construct some wallet cfg
         let adriana_wallet_cfg = WalletCfg {
             name: String::from("adriana_wallet"),
@@ -183,12 +179,12 @@ mod tests {
             .into(),
             address_look_ahead: 1,
         };
-        println!(
-            "{} \r\n {} \r\n {} \r\n",
-            serde_json::to_string(&adriana_wallet_cfg).unwrap(),
-            serde_json::to_string(&jose_wallet_cfg).unwrap(),
-            serde_json::to_string(&ahmed_wallet_cfg).unwrap()
-        );
+        //println!(
+        //    "{} \r\n {} \r\n {} \r\n",
+        //    serde_json::to_string(&adriana_wallet_cfg).unwrap(),
+        //    serde_json::to_string(&jose_wallet_cfg).unwrap(),
+        //    serde_json::to_string(&ahmed_wallet_cfg).unwrap()
+        //);
 
         // 3. Wallet instances and sync
         let synced_wallets: Vec<_> = vec![adriana_wallet_cfg, jose_wallet_cfg, ahmed_wallet_cfg]
@@ -213,11 +209,11 @@ mod tests {
             .unwrap();
         assert_eq!(ariana_add, jose_add);
         assert_eq!(jose_add, ahmad_add);
-        println!("{}",ariana_add);
+        // println!("{}", ariana_add);
     }
 
     #[test]
-    fn deserialize_multsig_and_sign(){
+    fn deserialize_multsig_and_sign() {
         // send back to  https://testnet-faucet.mempool.co/
         // let rcvr_address = "mkHS9ne12qx9pS9VojpwU5xtRd4T7X7ZUt";
         let rcvr_address = "tb1qcpvp8fwv23egkee7ld2dt9ndymcyhl58g4fvq479tsr62u5mjakq2r8gke";
@@ -235,7 +231,9 @@ mod tests {
         jose_wallet.sync(SifirWallet {}, Some(100)).unwrap();
         ahmed_wallet.sync(SifirWallet {}, Some(100)).unwrap();
 
-        let adriana_address = adriana_wallet.get_address(AddressIndex::LastUnused).unwrap();
+        let adriana_address = adriana_wallet
+            .get_address(AddressIndex::LastUnused)
+            .unwrap();
         let jose_address = jose_wallet.get_address(AddressIndex::LastUnused).unwrap();
         let ahmed_addres = ahmed_wallet.get_address(AddressIndex::LastUnused).unwrap();
 
@@ -265,14 +263,12 @@ mod tests {
                 .payload
                 .script_pubkey(),
         )
-            .drain_wallet()
-            .fee_rate(FeeRate::from_sat_per_vb(1.0))
-            .enable_rbf();
+        .drain_wallet()
+        .fee_rate(FeeRate::from_sat_per_vb(1.0))
+        .enable_rbf();
 
         let (mut psbt, _tx_details) = txn.finish().unwrap();
-        let finished = jose_wallet
-            .sign(&mut psbt, SignOptions::default())
-            .unwrap();
+        let finished = jose_wallet.sign(&mut psbt, SignOptions::default()).unwrap();
         assert!(!finished);
         let finished = ahmed_wallet
             .sign(&mut psbt, SignOptions::default())
@@ -282,6 +278,5 @@ mod tests {
         //let txn_id = jose_wallet.broadcast(psbt.extract_tx()).unwrap();
         //println!("txnId: {}",txn_id);
         //assert_eq!(txn_id.len(),32)
-
     }
 }
