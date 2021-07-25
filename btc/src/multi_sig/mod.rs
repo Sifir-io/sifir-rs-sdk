@@ -1,7 +1,8 @@
 use crate::bdk::descriptor::IntoWalletDescriptor;
 use crate::{sled, AddressIndex, Client, ElectrumBlockchain, Wallet};
 use crate::{
-    DerivedBip39Xprvs, ElectrumMemoryWallet, ElectrumSledWallet, WalletDescriptors, XprvsWithPaths, XpubsWithPaths
+    DerivedBip39Xprvs, ElectrumMemoryWallet, ElectrumSledWallet, WalletDescriptors, XprvsWithPaths,
+    XpubsWithPaths,
 };
 pub use bdk::bitcoin::util::bip32::{
     ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, ExtendedPubKey, Fingerprint,
@@ -13,7 +14,6 @@ use serde::{Deserialize, Serialize};
 use std::iter::Map;
 use std::ops::RangeFrom;
 use std::str::FromStr;
-
 
 #[derive(Debug, Serialize, Deserialize)]
 pub enum MultiSigKey {
@@ -92,7 +92,7 @@ mod tests {
         // 1. Make some keys
         let derive_base = "m/44'/0'/0'";
         let network = Network::Testnet;
-        // Returns a tuple of closures that return cloned descriptors
+        // Returns a tuple of closures that generate an Xpub and Xprv for each key
         let mut xpub_xprv_tuple = (1..)
             .map(|_| {
                 let key = DerivedBip39Xprvs::new(
@@ -146,6 +146,7 @@ mod tests {
             }
             .into(),
             address_look_ahead: 1,
+            server_uri: None,
         };
 
         let jose_wallet_cfg = WalletCfg {
@@ -162,6 +163,7 @@ mod tests {
             }
             .into(),
             address_look_ahead: 1,
+            server_uri: None,
         };
         let ahmed_wallet_cfg = WalletCfg {
             name: String::from("ahmed_wallet"),
@@ -178,6 +180,7 @@ mod tests {
             }
             .into(),
             address_look_ahead: 1,
+            server_uri: None,
         };
         //println!(
         //    "{} \r\n {} \r\n {} \r\n",
@@ -219,12 +222,12 @@ mod tests {
         let rcvr_address = "tb1qcpvp8fwv23egkee7ld2dt9ndymcyhl58g4fvq479tsr62u5mjakq2r8gke";
 
         // Deserialize savde wallets
-        let adriana_wallet: ElectrumMemoryWallet = serde_json::from_str::<WalletCfg>("{\"name\":\"adriana_wallet\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wsh(sortedmulti(2,tprv8ip37K5SBQqZcmpaH72wSNfAAXPt5UPUVnWHPTkPqgvQCm5kFRkQL9k8fmXV7xG9nB3eJxi2SKVGtRQspG2NRfkyj5dseVPaznx4saX8KQp/0/*,[011aed20/44'/0'/0'/0]tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,[83488a89/44'/0'/0'/0]tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#z6qy6pcq\",\"internal\":null,\"public\":\"wsh(sortedmulti(2,tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,[011aed20/44'/0'/0'/0]tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,[83488a89/44'/0'/0'/0]tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#6365az6x\"},\"address_look_ahead\":1,\"db_path\":null}
+        let adriana_wallet: ElectrumMemoryWallet = serde_json::from_str::<WalletCfg>("{\"name\":\"adriana_wallet\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wsh(sortedmulti(2,tprv8ip37K5SBQqZcmpaH72wSNfAAXPt5UPUVnWHPTkPqgvQCm5kFRkQL9k8fmXV7xG9nB3eJxi2SKVGtRQspG2NRfkyj5dseVPaznx4saX8KQp/0/*,[011aed20/44'/0'/0'/0]tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,[83488a89/44'/0'/0'/0]tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#z6qy6pcq\",\"internal\":null,\"public\":\"wsh(sortedmulti(2,tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,[011aed20/44'/0'/0'/0]tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,[83488a89/44'/0'/0'/0]tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#6365az6x\"},\"address_look_ahead\":1,\"db_path\":null,\"server_uri\":null}
 ").unwrap().into();
-        let jose_wallet: ElectrumMemoryWallet = serde_json::from_str::<WalletCfg>(" {\"name\":\"jose_wallet\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wsh(sortedmulti(2,[74d72b43/44'/0'/0'/0]tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,tprv8isP1XkHjjtLn1Tw95ZiXhZvYoDxqgsw9w4Rvk7MFYCKknrgSnjJZSys7k4aMx5Fk6vidUv7KWgj5RBRVR1aLqqNzZV6gDgpJS7PMNpza1C/0/*,[83488a89/44'/0'/0'/0]tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#yfgnjyt7\",\"internal\":null,\"public\":\"wsh(sortedmulti(2,[74d72b43/44'/0'/0'/0]tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,[83488a89/44'/0'/0'/0]tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#ulfgmk2l\"},\"address_look_ahead\":1,\"db_path\":null}
+        let jose_wallet: ElectrumMemoryWallet = serde_json::from_str::<WalletCfg>(" {\"name\":\"jose_wallet\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wsh(sortedmulti(2,[74d72b43/44'/0'/0'/0]tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,tprv8isP1XkHjjtLn1Tw95ZiXhZvYoDxqgsw9w4Rvk7MFYCKknrgSnjJZSys7k4aMx5Fk6vidUv7KWgj5RBRVR1aLqqNzZV6gDgpJS7PMNpza1C/0/*,[83488a89/44'/0'/0'/0]tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#yfgnjyt7\",\"internal\":null,\"public\":\"wsh(sortedmulti(2,[74d72b43/44'/0'/0'/0]tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,[83488a89/44'/0'/0'/0]tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#ulfgmk2l\"},\"address_look_ahead\":1,\"db_path\":null,\"server_uri\":null}
 ").unwrap().into();
 
-        let ahmed_wallet: ElectrumMemoryWallet = serde_json::from_str::<WalletCfg>(" {\"name\":\"ahmed_wallet\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wsh(sortedmulti(2,[74d72b43/44'/0'/0'/0]tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,[011aed20/44'/0'/0'/0]tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,tprv8j263KZ1UPcNvUKpmSmndAHT6WjagNpHa5t8kibWS1QFtLBCys2vRazzayhbAKNj9WdGaAC6gFjga7YibMNhboLeJKgfxS5b7ESy6gTMkAk/0/*))#zzx570uh\",\"internal\":null,\"public\":\"wsh(sortedmulti(2,[74d72b43/44'/0'/0'/0]tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,[011aed20/44'/0'/0'/0]tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#zskvcukm\"},\"address_look_ahead\":1,\"db_path\":null}
+        let ahmed_wallet: ElectrumMemoryWallet = serde_json::from_str::<WalletCfg>(" {\"name\":\"ahmed_wallet\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wsh(sortedmulti(2,[74d72b43/44'/0'/0'/0]tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,[011aed20/44'/0'/0'/0]tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,tprv8j263KZ1UPcNvUKpmSmndAHT6WjagNpHa5t8kibWS1QFtLBCys2vRazzayhbAKNj9WdGaAC6gFjga7YibMNhboLeJKgfxS5b7ESy6gTMkAk/0/*))#zzx570uh\",\"internal\":null,\"public\":\"wsh(sortedmulti(2,[74d72b43/44'/0'/0'/0]tpubDFW5Fj7gKnXEWErNAkhXqnKGjYupEoaP5674fynhFxio3FLWspZzWeMzquGXpVs1LknsbBvxPVu8XPWXZDwKFFr56kagYiPL8mLCiZ5Wq1K/0/*,[011aed20/44'/0'/0'/0]tpubDFZR9wnXt7a1fUVj2jEJw7E37pju124qjEfDDG9efozibH7T5BYtjwbjHtxHDK9q2nqsTYn25CngM2XUpXd1oZWCByWjkCG1YY1wnRvPTb8/0/*,tpubDFi8BjbFcmJ3owMcf6SP2ZwZfYFWqi1C9PUv3EdorHCeipRycFrWc5crm7yJSUJiMWpqoXL37ykWgk6Str2yRd519MogoRKoLfkCuRT33oY/0/*))#zskvcukm\"},\"address_look_ahead\":1,\"db_path\":null,\"server_uri\":null}
 ").unwrap().into();
 
         adriana_wallet.sync(SifirWallet {}, Some(100)).unwrap();

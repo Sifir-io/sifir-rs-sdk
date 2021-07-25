@@ -10,6 +10,7 @@ pub use bdk::bitcoin::util::bip32::{
 };
 pub use bdk::bitcoin::{secp256k1, Address, Network, OutPoint, PrivateKey, Script, Txid};
 pub use bdk::blockchain::{log_progress, Blockchain, ElectrumBlockchain, Progress, ProgressData};
+use bdk::blockchain::{AnyBlockchainConfig, ConfigurableBlockchain, ElectrumBlockchainConfig};
 pub use bdk::database::{BatchDatabase, MemoryDatabase};
 use bdk::descriptor::IntoWalletDescriptor;
 use bdk::electrum_client::Client;
@@ -42,8 +43,7 @@ pub struct WalletCfg {
     descriptors: WalletDescriptors,
     address_look_ahead: u32,
     db_path: Option<String>,
-    // FIXME enable this , right now we have electrum server hard coded
-    // server_uri: Option<String>
+    server_uri: Option<String>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -167,7 +167,12 @@ impl From<WalletCfg> for ElectrumMemoryWallet {
             },
             cfg.descriptors.network,
             MemoryDatabase::new(),
-            ElectrumBlockchain::from(Client::new("ssl://electrum.blockstream.info:60002").unwrap()),
+            match cfg.server_uri {
+                Some(uri) => ElectrumBlockchain::from(Client::new(&uri).unwrap()),
+                None => ElectrumBlockchain::from(
+                    Client::new("ssl://electrum.blockstream.info:60002").unwrap(),
+                ),
+            },
         )
         .unwrap()
     }
@@ -178,6 +183,23 @@ impl From<WalletCfg> for ElectrumSledWallet {
         let secp = &secp256k1::Secp256k1::new();
         let db = sled::open(cfg.db_path.expect("Missing db path")).unwrap();
         let tree = db.open_tree(cfg.name).unwrap();
+        let electrum_config = ElectrumBlockchainConfig {
+            url: match cfg.server_uri {
+                Some(uri) => uri,
+                None => "ssl://electrum.blockstream.info:60002".into(),
+            }
+            .into(),
+            socks5: None,
+            retry: 7,
+            timeout: Some(30),
+        };
+        println!(
+            "Starting wallet with config {}",
+            serde_json::to_string(&electrum_config).unwrap()
+        );
+
+        let client = ElectrumBlockchain::from_config(&electrum_config).unwrap();
+
         Wallet::new(
             cfg.descriptors
                 .external
@@ -194,7 +216,7 @@ impl From<WalletCfg> for ElectrumSledWallet {
             },
             cfg.descriptors.network,
             tree,
-            ElectrumBlockchain::from(Client::new("ssl://electrum.blockstream.info:60002").unwrap()),
+            client,
         )
         .unwrap()
     }
@@ -382,6 +404,7 @@ mod tests {
             descriptors,
             address_look_ahead: 2,
             db_path: None,
+            server_uri: Some("ssl://electrum.blockstream.info:50002".into()),
         };
         let wallet: ElectrumMemoryWallet = wallet_cfg.into();
         let address = wallet.get_address(AddressIndex::New).unwrap();
@@ -407,6 +430,7 @@ mod tests {
             descriptors,
             address_look_ahead: 2,
             db_path: Some(String::from("/tmp/sifir-bdk")),
+            server_uri: Some("ssl://electrum.blockstream.info:50002".into()),
         };
         let wallet: ElectrumSledWallet = wallet_cfg.into();
         let address = wallet.get_address(AddressIndex::New).unwrap();
@@ -450,8 +474,8 @@ mod tests {
     #[test]
     #[ignore]
     fn can_sync_wallet_and_sign_utxos() {
-        let rcvr_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8e5FKc3Mdn1ByJgZ2GBBA4DFZ2tAzmtquHHPhRtRFmq1M8a3je1DXhRu2Dnx6db3GKmavKbku5sdkcAzWBHwi1KVoNMi4V3oox4vfrvuyNs/0\'/0/*)\",\"internal\":\"wpkh([547f0cd3/0\'/1]tprv8e5FKc3Mdn1C3eHRQ4pBZR13wHTHpX1umHgPpQv9HDjA5MRUKmRQqjWic6gfSAp6CDyM8B3ur3jkayG7E8yG5eNj3ZcCEJnuaKa14Q9Tf9W/0\'/1/*)#63l9gmuk\",\"public\":\"wpkh([547f0cd3/0\'/0/0\']tpubDCYJ5ZRDkRcFtTQZzetaWVS6q52rs3RTAKXYMWEvGCR6Nb1LTFpdwGohYQ4f98aVE6NxYN3tru8kziP9vZhDYZYDd5VDERyFr8U5WeCbGHy/0/*)#knhduycc\"},\"address_look_ahead\":2}").unwrap();
-        let sender_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test_2\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8dWQe989ftsPNn9NddyKVri3GHs4voe2E4xS75oX9neHeQGCnbn2ru3o1mbxmW2SnNRtpMdaopc6GWftoGMyhKPX3zjCBTKU1Ckw6E6NmQL/0\'/0/*)\",\"internal\":\"wpkh([0776ff86/0\'/1]tprv8dWQe989ftsPRPriFR6w1cG3R2s5FBxXsDscygXe8RiaUQrRkA7J8FFJwTPRBoLia7fqVB8s87SQ5rLnVjbZfDpuorRkBBqrSHKVbhUMYmq/0\'/1/*)#ynv3pma4\",\"public\":\"wpkh([0776ff86/0\'/0/0\']tpubDCmXi7Tx4hixdHtw4WVgnSAsDJ4Q8oR3NSq6DYRmCC46hihokPaHo3RAdaSQza8sWtAU63zt5VgkgYt6tUmZQWqVZio5vptzgrNMmrRwcBF/0/*)#cn8qlh6k\"},\"address_look_ahead\":2}").unwrap();
+        let rcvr_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8e5FKc3Mdn1ByJgZ2GBBA4DFZ2tAzmtquHHPhRtRFmq1M8a3je1DXhRu2Dnx6db3GKmavKbku5sdkcAzWBHwi1KVoNMi4V3oox4vfrvuyNs/0\'/0/*)\",\"internal\":\"wpkh([547f0cd3/0\'/1]tprv8e5FKc3Mdn1C3eHRQ4pBZR13wHTHpX1umHgPpQv9HDjA5MRUKmRQqjWic6gfSAp6CDyM8B3ur3jkayG7E8yG5eNj3ZcCEJnuaKa14Q9Tf9W/0\'/1/*)#63l9gmuk\",\"public\":\"wpkh([547f0cd3/0\'/0/0\']tpubDCYJ5ZRDkRcFtTQZzetaWVS6q52rs3RTAKXYMWEvGCR6Nb1LTFpdwGohYQ4f98aVE6NxYN3tru8kziP9vZhDYZYDd5VDERyFr8U5WeCbGHy/0/*)#knhduycc\"},\"address_look_ahead\":2,\"server_uri\": \"ssl://electrum.blockstream.info:60002\"}").unwrap();
+        let sender_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test_2\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8dWQe989ftsPNn9NddyKVri3GHs4voe2E4xS75oX9neHeQGCnbn2ru3o1mbxmW2SnNRtpMdaopc6GWftoGMyhKPX3zjCBTKU1Ckw6E6NmQL/0\'/0/*)\",\"internal\":\"wpkh([0776ff86/0\'/1]tprv8dWQe989ftsPRPriFR6w1cG3R2s5FBxXsDscygXe8RiaUQrRkA7J8FFJwTPRBoLia7fqVB8s87SQ5rLnVjbZfDpuorRkBBqrSHKVbhUMYmq/0\'/1/*)#ynv3pma4\",\"public\":\"wpkh([0776ff86/0\'/0/0\']tpubDCmXi7Tx4hixdHtw4WVgnSAsDJ4Q8oR3NSq6DYRmCC46hihokPaHo3RAdaSQza8sWtAU63zt5VgkgYt6tUmZQWqVZio5vptzgrNMmrRwcBF/0/*)#cn8qlh6k\"},\"address_look_ahead\":2},\"server_uri\": \"ssl://electrum.blockstream.info:60002\"}").unwrap();
 
         let rcvr_wallet: ElectrumMemoryWallet = rcvr_wallet_cfg.into();
         let sender_wallet: ElectrumMemoryWallet = sender_wallet_cfg.into();
@@ -466,7 +490,7 @@ mod tests {
                 println!("progress is {} and message {:?}", progress, message);
                 Ok(())
             }
-        };
+        }
         let sync_result = sender_wallet.sync(SifirWallet {}, Some(100));
         sync_result.unwrap();
 

@@ -1,6 +1,11 @@
-use libc::{c_char, c_void};
-use std::ffi::{CStr, CString};
-use std::panic::catch_unwind;
+use libc::c_char;
+use logger;
+
+#[no_mangle]
+/// Starts env logger
+pub extern "C" fn start_logger() {
+    logger::Logger::new();
+}
 
 #[repr(C)]
 pub enum ResultMessage {

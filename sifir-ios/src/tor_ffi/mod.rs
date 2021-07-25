@@ -1,6 +1,5 @@
 use crate::util::*;
 use libc::{c_char, c_void};
-use logger;
 use serde_json::json;
 use std::ffi::{CStr, CString};
 use std::ops::{Deref, DerefMut};
@@ -21,12 +20,6 @@ pub enum ResultMessage {
 pub struct BoxedResult<T> {
     pub result: Option<Box<T>>,
     pub message: ResultMessage,
-}
-
-#[no_mangle]
-/// Starts env logger
-pub extern "C" fn start_logger() {
-    logger::Logger::new();
 }
 
 #[no_mangle]

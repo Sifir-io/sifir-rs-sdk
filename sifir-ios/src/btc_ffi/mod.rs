@@ -1,9 +1,10 @@
 use crate::util::*;
-use bdk::bitcoin::consensus::encode::{deserialize, serialize, serialize_hex};
+use bdk::bitcoin::consensus::encode::{deserialize, serialize};
+use bdk::bitcoin::util::psbt::PartiallySignedTransaction;
 use bdk::SignOptions;
 use btc::multi_sig::*;
 use btc::*;
-use libc::{c_char, c_void};
+use libc::c_char;
 use serde_json::json;
 use std::ffi::{CStr, CString};
 use std::panic::{catch_unwind, AssertUnwindSafe};
@@ -137,6 +138,7 @@ pub extern "C" fn get_electrum_wallet_balance(
     unwind_into_boxed_result!({ matcher.get_balance().unwrap() })
 }
 
+// TODO  add index ? last, new , etcc...
 #[no_mangle]
 pub extern "C" fn get_electrum_wallet_new_address(
     electrum_wallet: *mut ElectrumSledWallet,
@@ -144,11 +146,11 @@ pub extern "C" fn get_electrum_wallet_new_address(
     let wallet = unsafe { &mut *electrum_wallet };
     let matcher = AssertUnwindSafe(wallet);
     unwind_into_boxed_result!({
-        let address = matcher.get_address(AddressIndex::New).unwrap();
+        let address = matcher.get_address(AddressIndex::LastUnused).unwrap();
         CString::new(format!("{}", address)).unwrap().into_raw()
     })
 }
-// TODO move this
+// TODO  accept data observer
 struct SifirWallet {}
 impl Progress for SifirWallet {
     fn update(&self, progress: f32, message: Option<String>) -> Result<(), bdk::Error> {
@@ -187,8 +189,8 @@ pub extern "C" fn create_tx(
     unwind_into_boxed_result!({
         let txn_str = required_str_from_cchar_ptr!(tx);
         let create_txn: CreateTx = serde_json::from_str(txn_str).unwrap();
-        let (pp, txn) = create_txn.into_wallet_txn(&matcher).unwrap();
-        let txn_json = json!({"psbt": base64::encode(serialize(&pp)), "txnDetails" : txn});
+        let (psbt, txn) = create_txn.into_wallet_txn(&matcher).unwrap();
+        let txn_json = json!({"psbt": base64::encode(serialize(&psbt)), "txnDetails" : txn});
         CString::new(txn_json.to_string()).unwrap().into_raw()
     })
 }
@@ -254,7 +256,22 @@ pub extern "C" fn sign_psbt(
         CString::new(json.to_string()).unwrap().into_raw()
     })
 }
-/// TODO broadcast_pbst(base64 pbst) -> txnid
+#[no_mangle]
+pub extern "C" fn broadcast_pbst(
+    electrum_wallet: *mut ElectrumSledWallet,
+    psbt_base64: *const c_char,
+) -> *mut BoxedResult<*mut c_char> {
+    let psbt_str = required_str_from_cchar_ptr!(psbt_base64);
+    let wallet = unsafe { &mut *electrum_wallet };
+    let matcher = AssertUnwindSafe(wallet);
+
+    unwind_into_boxed_result!({
+        let psbt =
+            deserialize::<PartiallySignedTransaction>(&base64::decode(&psbt_str).unwrap()).unwrap();
+        let txn_id = matcher.broadcast(psbt.extract_tx()).unwrap();
+        CString::new(txn_id.to_string()).unwrap().into_raw()
+    })
+}
 
 /// Convert XprvsWithPaths to XpubsWithPaths
 #[no_mangle]
@@ -286,4 +303,21 @@ pub extern "C" fn xprvs_w_paths_to_xpubs_w_paths(
 pub unsafe extern "C" fn drop_wallet(wallet: *mut ElectrumSledWallet) {
     assert!(!wallet.is_null());
     let _: Box<ElectrumSledWallet> = Box::from_raw(wallet);
+}
+
+#[no_mangle]
+///# Safety
+/// deserialize consenus encoded base64 PSBT string
+// TODO Turn this to a validate function ? is it ours, can we control any of it ? etc..
+pub extern "C" fn consensus_b64_psbt_to_json_string(
+    psbt: *const c_char,
+) -> *mut BoxedResult<*mut c_char> {
+    let psbt_str = required_str_from_cchar_ptr!(psbt);
+
+    unwind_into_boxed_result!({
+        let psbt =
+            deserialize::<PartiallySignedTransaction>(&base64::decode(&psbt_str).unwrap()).unwrap();
+        let json = serde_json::to_string(&psbt).unwrap();
+        CString::new(json).unwrap().into_raw()
+    })
 }
