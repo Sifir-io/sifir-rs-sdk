@@ -131,15 +131,25 @@ pub extern "C" fn get_electrum_wallet_balance(
     unwind_into_boxed_result!({ matcher.get_balance().unwrap() })
 }
 
-// TODO  add index ? last, new , etcc...
+/// Gets an address from the wallet based on the index provided
+/// index = 0 => LastUnused
+/// index = 1 => New
+/// index > 1 => Peek(index)
 #[no_mangle]
-pub extern "C" fn get_electrum_wallet_new_address(
+pub extern "C" fn get_electrum_wallet_address(
     electrum_wallet: *mut ElectrumSledWallet,
+    index: u32,
 ) -> *mut BoxedResult<*mut c_char> {
     let wallet = unsafe { &mut *electrum_wallet };
     let matcher = AssertUnwindSafe(wallet);
     unwind_into_boxed_result!({
-        let address = matcher.get_address(AddressIndex::LastUnused).unwrap();
+        let address = matcher
+            .get_address(match index {
+                0 => AddressIndex::LastUnused,
+                1 => AddressIndex::New,
+                _ => AddressIndex::Peek(index),
+            })
+            .unwrap();
         CString::new(format!("{}", address)).unwrap().into_raw()
     })
 }
@@ -187,7 +197,6 @@ pub extern "C" fn create_tx(
         CString::new(txn_json.to_string()).unwrap().into_raw()
     })
 }
-
 
 #[no_mangle]
 pub extern "C" fn sign_psbt(
