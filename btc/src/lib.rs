@@ -44,6 +44,8 @@ pub struct WalletCfg {
     address_look_ahead: u32,
     db_path: Option<String>,
     server_uri: Option<String>,
+    // TODO IMPLMENT THIS  replace server_uri
+    // blockchain_cfg: Option<AnyBlockchainConfig>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -193,10 +195,6 @@ impl From<WalletCfg> for ElectrumSledWallet {
             retry: 7,
             timeout: Some(30),
         };
-        println!(
-            "Starting wallet with config {}",
-            serde_json::to_string(&electrum_config).unwrap()
-        );
 
         let client = ElectrumBlockchain::from_config(&electrum_config).unwrap();
 
@@ -272,6 +270,21 @@ impl DerivedBip39Xprvs {
     }
 }
 
+/// Enum that wraps all DescriptorCfg we can pass as serialized JSON
+#[derive(Debug, Serialize, Deserialize)]
+pub enum AnyDescriptorCfg {
+    Wpkh(Vec<XprvsWithPaths>, Network),
+    WshMultiSorted(multi_sig::MultiSigCfg),
+}
+
+impl From<AnyDescriptorCfg> for WalletDescriptors {
+    fn from(cfg: AnyDescriptorCfg) -> Self {
+        match cfg {
+            AnyDescriptorCfg::Wpkh(xprvs, net) => (xprvs, net).into(),
+            AnyDescriptorCfg::WshMultiSorted(cfg) => cfg.into(),
+        }
+    }
+}
 impl From<(Vec<XprvsWithPaths>, Network)> for WalletDescriptors {
     fn from((keys, network): (Vec<XprvsWithPaths>, Network)) -> Self {
         let mut descriptors = keys
@@ -424,7 +437,8 @@ mod tests {
         )
         .unwrap();
 
-        let descriptors: WalletDescriptors = (wallet_xprvs.xprv_w_paths, network).into();
+        let descriptors: WalletDescriptors =
+            AnyDescriptorCfg::Wpkh(wallet_xprvs.xprv_w_paths, network).into();
         let wallet_cfg = WalletCfg {
             name: String::from("mytest2"),
             descriptors,

@@ -1,4 +1,5 @@
 use crate::bdk::descriptor::IntoWalletDescriptor;
+use crate::AnyDescriptorCfg;
 use crate::{sled, AddressIndex, Client, ElectrumBlockchain, Wallet};
 use crate::{
     DerivedBip39Xprvs, ElectrumMemoryWallet, ElectrumSledWallet, WalletDescriptors, XprvsWithPaths,
@@ -22,6 +23,35 @@ pub enum MultiSigKey {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
+/// 
+///  Serializes as: 
+///{
+///  "descriptors": [
+///    {
+///      "Xprv": [
+///        "tprv8hb2jMkXPyzimyaTaQ9tTH2xj7CcQENS3uMdNptCyGmDgSbFA2q7Zfpyjs3kf96Ecmascxp2bRg1ztSXGGY3jhzT1N5chXgHUcRwWAAh7kY",
+///        "m/0",
+///        "ff31a959"
+///      ]
+///    },
+///    {
+///      "Xpub": [
+///        "tpubDFSuJXy4vxC6vX3o1yNZjmdR7T7qS2FgbtqhHSvjNMjyXLHNJk9XzTqCPbVrbevbYyasY6wnS96s5Er4xkNosm3pcuyFH9LUxPUavJ2EZSC",
+///        "m/44'/0'/0'/0",
+///        "77306a4c"
+///      ]
+///    },
+///    {
+///      "Xpub": [
+///        "tpubDEYM383BbDXgPSpGmBWcdDCDo5HbREUBPVeUuyypBXpyQsMGykfGA2AURtuHbaN7ktrcbyct665m6VbtyQKsQD17Vp7yavVwdyGQ87659RR",
+///        "m/44'/0'/0'/0",
+///        "d22d870c"
+///      ]
+///    }
+///  ],
+///  "network": "testnet",
+///  "quorom": 2
+///}
 pub struct MultiSigCfg {
     descriptors: Vec<MultiSigKey>,
     network: Network,
@@ -135,7 +165,7 @@ mod tests {
         let adriana_wallet_cfg = WalletCfg {
             name: String::from("adriana_wallet"),
             db_path: None,
-            descriptors: MultiSigCfg {
+            descriptors: AnyDescriptorCfg::WshMultiSorted(MultiSigCfg {
                 descriptors: vec![
                     MultiSigKey::Xprv(andriana_xprv()),
                     MultiSigKey::Xpub(jose_xpub()),
@@ -143,7 +173,7 @@ mod tests {
                 ],
                 network: Network::Testnet,
                 quorom: 2,
-            }
+            })
             .into(),
             address_look_ahead: 1,
             server_uri: None,
@@ -152,7 +182,7 @@ mod tests {
         let jose_wallet_cfg = WalletCfg {
             name: String::from("jose_wallet"),
             db_path: None,
-            descriptors: MultiSigCfg {
+            descriptors: AnyDescriptorCfg::WshMultiSorted(MultiSigCfg {
                 descriptors: vec![
                     MultiSigKey::Xpub(andriana_xpub()),
                     MultiSigKey::Xprv(jose_xprv()),
@@ -160,7 +190,7 @@ mod tests {
                 ],
                 network: Network::Testnet,
                 quorom: 2,
-            }
+            })
             .into(),
             address_look_ahead: 1,
             server_uri: None,
@@ -168,7 +198,7 @@ mod tests {
         let ahmed_wallet_cfg = WalletCfg {
             name: String::from("ahmed_wallet"),
             db_path: None,
-            descriptors: MultiSigCfg {
+            descriptors: AnyDescriptorCfg::WshMultiSorted(MultiSigCfg {
                 descriptors: vec![
                     MultiSigKey::Xpub(andriana_xpub()),
                     MultiSigKey::Xpub(jose_xpub()),
@@ -177,17 +207,17 @@ mod tests {
 
                 network: Network::Testnet,
                 quorom: 2,
-            }
+            })
             .into(),
             address_look_ahead: 1,
             server_uri: None,
         };
-        //println!(
-        //    "{} \r\n {} \r\n {} \r\n",
-        //    serde_json::to_string(&adriana_wallet_cfg).unwrap(),
-        //    serde_json::to_string(&jose_wallet_cfg).unwrap(),
-        //    serde_json::to_string(&ahmed_wallet_cfg).unwrap()
-        //);
+        println!(
+            "{} \r\n {} \r\n {} \r\n",
+            serde_json::to_string(&adriana_wallet_cfg).unwrap(),
+            serde_json::to_string(&jose_wallet_cfg).unwrap(),
+            serde_json::to_string(&ahmed_wallet_cfg).unwrap()
+        );
 
         // 3. Wallet instances and sync
         let synced_wallets: Vec<_> = vec![adriana_wallet_cfg, jose_wallet_cfg, ahmed_wallet_cfg]

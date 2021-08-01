@@ -96,22 +96,15 @@ pub extern "C" fn derive_xprvs(
 }
 
 #[no_mangle]
-pub extern "C" fn descriptors_from_xprvs_wpaths_vec(
-    vec_xprvs_with_paths_json: *const c_char,
-    network: *const c_char,
+pub extern "C" fn wallet_descriptors_from_any_descriptor_cfg(
+    any_desc_cfg: *const c_char,
 ) -> *mut BoxedResult<*mut c_char> {
     unwind_into_boxed_result!({
-        let xprvspaths_str = required_str_from_cchar_ptr!(vec_xprvs_with_paths_json);
-        let network_str = required_str_from_cchar_ptr!(network);
-        let network = match network_str {
-            "testnet" => Ok(Network::Testnet),
-            "mainnet" => Ok(Network::Bitcoin),
-            "bitcoin" => Ok(Network::Bitcoin),
-            _ => Err("Invalid network passed"),
-        }
-        .unwrap();
-        let x_prvs_with_path: Vec<XprvsWithPaths> = serde_json::from_str(xprvspaths_str).unwrap();
-        let wallet_descriptors: WalletDescriptors = (x_prvs_with_path, network).into();
+        let any_desc_cfg_str = required_str_from_cchar_ptr!(any_desc_cfg);
+        let wallet_descriptors: WalletDescriptors =
+            serde_json::from_str::<AnyDescriptorCfg>(any_desc_cfg_str)
+                .unwrap()
+                .into();
         let json = serde_json::to_string(&wallet_descriptors).unwrap();
         CString::new(json).unwrap().into_raw()
     })
@@ -195,49 +188,6 @@ pub extern "C" fn create_tx(
     })
 }
 
-/// Turns json of multi_sig_confg into WalletDescriptors JSON that be used with wallet_cfg and electrum_wallet_from_wallet_cfg
-///  MultiSigConf shouldb passed as json:
-///{
-///  "descriptors": [
-///    {
-///      "Xprv": [
-///        "tprv8hb2jMkXPyzimyaTaQ9tTH2xj7CcQENS3uMdNptCyGmDgSbFA2q7Zfpyjs3kf96Ecmascxp2bRg1ztSXGGY3jhzT1N5chXgHUcRwWAAh7kY",
-///        "m/0",
-///        "ff31a959"
-///      ]
-///    },
-///    {
-///      "Xpub": [
-///        "tpubDFSuJXy4vxC6vX3o1yNZjmdR7T7qS2FgbtqhHSvjNMjyXLHNJk9XzTqCPbVrbevbYyasY6wnS96s5Er4xkNosm3pcuyFH9LUxPUavJ2EZSC",
-///        "m/44'/0'/0'/0",
-///        "77306a4c"
-///      ]
-///    },
-///    {
-///      "Xpub": [
-///        "tpubDEYM383BbDXgPSpGmBWcdDCDo5HbREUBPVeUuyypBXpyQsMGykfGA2AURtuHbaN7ktrcbyct665m6VbtyQKsQD17Vp7yavVwdyGQ87659RR",
-///        "m/44'/0'/0'/0",
-///        "d22d870c"
-///      ]
-///    }
-///  ],
-///  "network": "testnet",
-///  "quorom": 2
-///}
-///
-#[no_mangle]
-pub extern "C" fn descriptors_from_multi_sig_conf(
-    mutli_sig_conf_json: *const c_char,
-) -> *mut BoxedResult<*mut c_char> {
-    unwind_into_boxed_result!({
-        let multi_sig_conf = required_str_from_cchar_ptr!(mutli_sig_conf_json);
-        let wallet_desc: WalletDescriptors = serde_json::from_str::<MultiSigCfg>(multi_sig_conf)
-            .unwrap()
-            .into();
-        let json = serde_json::to_string(&wallet_desc).unwrap();
-        CString::new(json).unwrap().into_raw()
-    })
-}
 
 #[no_mangle]
 pub extern "C" fn sign_psbt(
