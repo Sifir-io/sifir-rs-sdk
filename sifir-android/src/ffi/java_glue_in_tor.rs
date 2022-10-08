@@ -16,7 +16,6 @@ foreign_callback!(callback DataObserver {
 // internally wrap passed the Boxed DataObserver Impl we receive from Java
 // with Observer so we can Send across threads
 unsafe impl Send for Observer {}
-
 unsafe impl Sync for Observer {}
 
 struct Observer {

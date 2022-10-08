@@ -23,8 +23,8 @@ pub enum MultiSigKey {
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-/// 
-///  Serializes as: 
+///
+///  Serializes as:
 ///{
 ///  "descriptors": [
 ///    {

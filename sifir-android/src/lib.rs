@@ -1,3 +1,2 @@
-#![allow(non_snake_case)]
-pub mod ffi;
-pub use ffi::*;
+pub mod ffi_cpp;
+pub use ffi_cpp::*;

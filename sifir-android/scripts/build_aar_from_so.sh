@@ -43,7 +43,9 @@ done;
 echo "Copied all binaries...";
 
 # Build AAR
-cd ../app && ./gradlew assembleRelease --info
+cd ../app 
+./gradlew cleanBuildCache
+./gradlew assembleRelease --stacktrace
 [ $retVal -ne 0 ] && echo "[ERROR] Building AAR" && exit 1;
 cd ../scripts
 \cp -rf ../app/tor/build/outputs/aar ../outputs/

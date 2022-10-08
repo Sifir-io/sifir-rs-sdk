@@ -27,10 +27,12 @@ case $features in
 esac
 
 export SIFIR_ANDROID_JAVA_DIR=$aar_dir
+# delete stuff that might already be compiled
 target_dir="./app/tor/src/main/java/com/sifir/$SIFIR_ANDROID_JAVA_DIR"
 
-read -p "Will build features $features to aar target dir $target_dir, press Ctrl-C to abort or any other key to continue...";
+read -p "Will build features $features to aar target dir $target_dir, \r\n Note: This will delete everything in the target_dir parent ! \r\n Press Ctrl-C to abort or any other key to continue...";
 
+rm -rf ./app/tor/src/main/java/com/sifir/*
 
 mkdir -p "$target_dir"
 retVal=$?
