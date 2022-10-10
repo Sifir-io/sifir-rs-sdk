@@ -1,5 +1,5 @@
+use crate::util::*;
 use libc::{c_char, c_void};
-use logger;
 use serde_json::json;
 use std::ffi::{CStr, CString};
 use std::ops::{Deref, DerefMut};
@@ -20,12 +20,6 @@ pub enum ResultMessage {
 pub struct BoxedResult<T> {
     pub result: Option<Box<T>>,
     pub message: ResultMessage,
-}
-
-#[no_mangle]
-/// Starts env logger
-pub extern "C" fn start_logger() {
-    logger::Logger::new();
 }
 
 #[no_mangle]
@@ -274,12 +268,13 @@ pub extern "C" fn delete_hidden_service(
     owned_client: *mut OwnedTorService,
     onion: *const c_char,
 ) -> *mut ResultMessage {
-
     assert!(!owned_client.is_null());
     assert!(!onion.is_null());
 
     let owned = unsafe { &mut *owned_client };
-    let onion_str = unsafe { CStr::from_ptr(onion) }.to_str().expect("Could not obtain str from onion");
+    let onion_str = unsafe { CStr::from_ptr(onion) }
+        .to_str()
+        .expect("Could not obtain str from onion");
 
     match owned.delete_hidden_service(String::from(onion_str)) {
         Ok(_) => Box::into_raw(Box::new(ResultMessage::Success)),
@@ -331,14 +326,6 @@ pub extern "C" fn start_http_hidden_service_handler(
 pub unsafe extern "C" fn tcp_stream_destroy(stream: *mut TcpSocksStream) {
     assert!(!stream.is_null());
     let _ = Box::from_raw(stream);
-}
-
-#[no_mangle]
-///# Safety
-/// Destroy a cstr
-pub unsafe extern "C" fn destroy_cstr(c_str: *mut c_char) {
-    assert!(!c_str.is_null());
-    let _ = Box::from_raw(c_str);
 }
 
 //

@@ -5,7 +5,7 @@ echo "|              |";
 echo "|      0       |";
 echo "|              |";
 echo "---------------";
-echo "Will build a universal IOS dylib !!";
+echo "Will build a universal IOS static lib !";
 echo "---------------";
 echo "---------------";
 

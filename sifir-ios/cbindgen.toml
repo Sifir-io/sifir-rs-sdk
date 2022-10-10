@@ -1,0 +1,8 @@
+language="C"
+namespace = "libsifir"
+includes = ["./sifir-typedef.h"]
+cpp_compat = true
+
+[defines]
+"feature = tor_daemon" = "TOR_DAEMON"
+"feature = btc_wallet" = "BTC_WALLET"

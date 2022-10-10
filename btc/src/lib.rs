@@ -1,0 +1,530 @@
+pub mod multi_sig;
+pub use bdk;
+use bdk::bitcoin::consensus::encode::{
+    deserialize, serialize, serialize_hex, Error as BitcoinError,
+};
+use bdk::bitcoin::util::address::Error as BitcoinAddressError;
+pub use bdk::bitcoin::util::bip32::{
+    ChildNumber, DerivationPath, Error as Bip32Error, ExtendedPrivKey, ExtendedPubKey, Fingerprint,
+    IntoDerivationPath,
+};
+pub use bdk::bitcoin::{secp256k1, Address, Network, OutPoint, PrivateKey, Script, Txid};
+pub use bdk::blockchain::{log_progress, Blockchain, ElectrumBlockchain, Progress, ProgressData};
+use bdk::blockchain::{AnyBlockchainConfig, ConfigurableBlockchain, ElectrumBlockchainConfig};
+pub use bdk::database::{BatchDatabase, MemoryDatabase};
+use bdk::descriptor::IntoWalletDescriptor;
+use bdk::electrum_client::Client;
+use bdk::keys::bip39::{Language, Mnemonic, MnemonicType};
+use bdk::keys::{
+    DerivableKey, DescriptorKey, ExtendedKey, GeneratableKey, GeneratedKey, KeyError, ScriptContext,
+};
+use bdk::miniscript::miniscript;
+pub use bdk::wallet::AddressIndex;
+pub use bdk::{sled, FeeRate, TxBuilder, Wallet};
+use rand::{thread_rng, RngCore};
+use serde::{Deserialize, Serialize};
+use serde_json;
+
+use bdk::miniscript::descriptor::DescriptorType;
+use std::str::FromStr;
+use thiserror::Error;
+
+#[derive(Debug, Serialize, Deserialize)]
+// Use that type
+pub struct WalletDescriptors {
+    network: Network,
+    external: String,
+    internal: Option<String>,
+    public: String,
+}
+#[derive(Debug, Serialize, Deserialize)]
+pub struct WalletCfg {
+    name: String,
+    descriptors: WalletDescriptors,
+    address_look_ahead: u32,
+    db_path: Option<String>,
+    server_uri: Option<String>,
+    // TODO IMPLMENT THIS  replace server_uri
+    // blockchain_cfg: Option<AnyBlockchainConfig>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct XprvsWithPaths(ExtendedPrivKey, DerivationPath, Fingerprint);
+#[derive(Debug, Serialize, Deserialize)]
+pub struct XpubsWithPaths(ExtendedPubKey, DerivationPath, Fingerprint);
+
+#[derive(Debug, Serialize, Deserialize)]
+pub struct DerivedBip39Xprvs {
+    phrase: String,
+    master_xprv: ExtendedPrivKey,
+    xprv_w_paths: Vec<XprvsWithPaths>,
+}
+
+#[derive(Error, Debug)]
+pub enum BtcErrors {
+    #[error("General BDK:")]
+    BdkError(#[from] bdk::Error),
+    #[error("BDK Key Error:")]
+    BdkKeyError(#[from] bdk::keys::KeyError),
+    #[error("Bip32 error:")]
+    Bip32Error(#[from] Bip32Error),
+    #[error("Io Error:")]
+    IoError(#[from] std::io::Error),
+    #[error("Descriptor Error:")]
+    DescriptorError(#[from] bdk::descriptor::error::Error),
+    #[error("BitcoinError Error:")]
+    BitcoinError(#[from] BitcoinError),
+    #[error("Bitcoin Address Error Error:")]
+    BitcoinAddressError(#[from] BitcoinAddressError),
+    #[error("Expected value missing for {:?}",.0)]
+    EmptyOption(String),
+    #[error(transparent)]
+    Other(#[from] anyhow::Error),
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum FeeType {
+    Abs,
+    Rate,
+}
+#[derive(Debug, Serialize, Deserialize)]
+enum SpendChangePolicy {
+    Yes,
+    No,
+    OnlyChange,
+}
+
+/// Txn parameters Easy to serialize into JSON and send across FFI
+#[derive(Debug, Serialize, Deserialize)]
+pub struct CreateTx {
+    recipients: Vec<(String, u64)>,
+    fee_type: FeeType,
+    fee: f32,
+    spend_change: SpendChangePolicy,
+    enable_rbf: bool,
+}
+
+/// Converts a CreateTx struct into a BDK TxnBuilder and finalizes it
+impl CreateTx {
+    pub fn into_wallet_txn<B: Blockchain, D: BatchDatabase>(
+        self,
+        wallet: &Wallet<B, D>,
+    ) -> Result<
+        (
+            bdk::bitcoin::util::psbt::PartiallySignedTransaction,
+            bdk::TransactionDetails,
+        ),
+        BtcErrors,
+    > {
+        let mut txn = wallet.build_tx();
+        // strings to addresses
+        let rcpts: Result<Vec<(Script, u64)>, BtcErrors> = self
+            .recipients
+            .into_iter()
+            .map(|(addr, amount)| {
+                let address = Address::from_str(addr.as_str())?.script_pubkey();
+                Ok((address, amount))
+            })
+            .collect();
+
+        txn.set_recipients(rcpts?);
+        match self.fee_type {
+            FeeType::Abs => txn.fee_absolute(self.fee as u64),
+            FeeType::Rate => txn.fee_rate(FeeRate::from_sat_per_vb(self.fee)),
+        };
+
+        match self.spend_change {
+            SpendChangePolicy::No => {
+                txn.do_not_spend_change();
+            }
+            SpendChangePolicy::OnlyChange => {
+                txn.only_spend_change();
+            }
+            _ => (),
+        };
+
+        txn.enable_rbf();
+        txn.finish().map_err(BtcErrors::BdkError)
+    }
+}
+pub type ElectrumMemoryWallet = Wallet<ElectrumBlockchain, MemoryDatabase>;
+pub type ElectrumSledWallet = Wallet<ElectrumBlockchain, sled::Tree>;
+
+impl From<WalletCfg> for ElectrumMemoryWallet {
+    fn from(cfg: WalletCfg) -> ElectrumMemoryWallet {
+        let secp = &secp256k1::Secp256k1::new();
+        Wallet::new(
+            cfg.descriptors
+                .external
+                .as_str()
+                .into_wallet_descriptor(&secp, cfg.descriptors.network)
+                .unwrap(),
+            match cfg.descriptors.internal {
+                Some(desc) => Some(
+                    desc.as_str()
+                        .into_wallet_descriptor(&secp, cfg.descriptors.network)
+                        .unwrap(),
+                ),
+                None => None,
+            },
+            cfg.descriptors.network,
+            MemoryDatabase::new(),
+            match cfg.server_uri {
+                Some(uri) => ElectrumBlockchain::from(Client::new(&uri).unwrap()),
+                None => ElectrumBlockchain::from(
+                    Client::new("ssl://electrum.blockstream.info:60002").unwrap(),
+                ),
+            },
+        )
+        .unwrap()
+    }
+}
+
+impl From<WalletCfg> for ElectrumSledWallet {
+    fn from(cfg: WalletCfg) -> ElectrumSledWallet {
+        let secp = &secp256k1::Secp256k1::new();
+        let db = sled::open(cfg.db_path.expect("Missing db path")).unwrap();
+        let tree = db.open_tree(cfg.name).unwrap();
+        let electrum_config = ElectrumBlockchainConfig {
+            url: match cfg.server_uri {
+                Some(uri) => uri,
+                None => "ssl://electrum.blockstream.info:60002".into(),
+            }
+            .into(),
+            socks5: None,
+            retry: 7,
+            timeout: Some(30),
+        };
+
+        let client = ElectrumBlockchain::from_config(&electrum_config).unwrap();
+
+        Wallet::new(
+            cfg.descriptors
+                .external
+                .as_str()
+                .into_wallet_descriptor(&secp, cfg.descriptors.network)
+                .unwrap(),
+            match cfg.descriptors.internal {
+                Some(desc) => Some(
+                    desc.as_str()
+                        .into_wallet_descriptor(&secp, cfg.descriptors.network)
+                        .unwrap(),
+                ),
+                None => None,
+            },
+            cfg.descriptors.network,
+            tree,
+            client,
+        )
+        .unwrap()
+    }
+}
+
+/// Generate a new Bip39 mnemonic seed
+/// Derive num_child from provided derive_base
+impl DerivedBip39Xprvs {
+    pub fn new(
+        derive_base: DerivationPath,
+        network: Network,
+        num_child: u32,
+        password: Option<String>,
+        seed_phrase: Option<String>,
+    ) -> Result<Self, BtcErrors> {
+        let secp = secp256k1::Secp256k1::new();
+        let (master_key, mnemonic_gen): (ExtendedKey<miniscript::BareCtx>, Mnemonic) =
+            match seed_phrase {
+                Some(phrase) => {
+                    let mnemonic = Mnemonic::from_phrase(&phrase, Language::English)?;
+                    (mnemonic.clone().into_extended_key()?, mnemonic)
+                }
+                None => {
+                    let mnemonic: GeneratedKey<_, miniscript::BareCtx> =
+                        Mnemonic::generate((MnemonicType::Words24, Language::English)).unwrap();
+                    let mnemonic = mnemonic.into_key();
+                    ((mnemonic.clone(), password).into_extended_key()?, mnemonic)
+                }
+            };
+
+        let xprv_master = master_key
+            .into_xprv(network)
+            .ok_or(BtcErrors::EmptyOption("xprv_master was empty".into()))?;
+        let xprv_w_paths: Result<Vec<XprvsWithPaths>, BtcErrors> = (0..num_child)
+            .map(|index| ChildNumber::Normal { index })
+            .map(|path| derive_base.extend(&[path]))
+            .map(|full_path| -> Result<XprvsWithPaths, BtcErrors> {
+                // Path is relative to key, so here derive from master
+                let extended_priv = xprv_master.derive_priv(&secp, &full_path)?;
+                Ok(XprvsWithPaths(
+                    extended_priv,
+                    full_path,
+                    xprv_master.fingerprint(&secp),
+                ))
+            })
+            .collect();
+
+        Ok(DerivedBip39Xprvs {
+            master_xprv: xprv_master,
+            phrase: mnemonic_gen.into_phrase(),
+            xprv_w_paths: xprv_w_paths?,
+        })
+    }
+}
+
+/// Enum that wraps all DescriptorCfg we can pass as serialized JSON
+#[derive(Debug, Serialize, Deserialize)]
+pub enum AnyDescriptorCfg {
+    Wpkh(Vec<XprvsWithPaths>, Network),
+    WshMultiSorted(multi_sig::MultiSigCfg),
+}
+
+impl From<AnyDescriptorCfg> for WalletDescriptors {
+    fn from(cfg: AnyDescriptorCfg) -> Self {
+        match cfg {
+            AnyDescriptorCfg::Wpkh(xprvs, net) => (xprvs, net).into(),
+            AnyDescriptorCfg::WshMultiSorted(cfg) => cfg.into(),
+        }
+    }
+}
+impl From<(Vec<XprvsWithPaths>, Network)> for WalletDescriptors {
+    fn from((keys, network): (Vec<XprvsWithPaths>, Network)) -> Self {
+        let mut descriptors = keys
+            .iter()
+            .map(|XprvsWithPaths(key, path, master_fp)| {
+                let descriptor_key = key
+                    .into_descriptor_key(
+                        Some((*master_fp, path.clone())),
+                        vec![key.child_number].into(),
+                    )
+                    .unwrap();
+                // TODO define the type of descriptor
+                bdk::descriptor!(wpkh((descriptor_key))).unwrap()
+            })
+            .take(2);
+
+        let (external_desc, ext_keymap, _) = descriptors.next().unwrap();
+        let (internal_desc, int_keymap, _) = descriptors.next().unwrap();
+
+        WalletDescriptors {
+            external: external_desc.to_string_with_secret(&ext_keymap),
+            internal: Some(internal_desc.to_string_with_secret(&int_keymap)),
+            network,
+            public: external_desc.to_string(),
+        }
+    }
+}
+
+impl From<(XprvsWithPaths, Network)> for XpubsWithPaths {
+    fn from((key, network): (XprvsWithPaths, Network)) -> Self {
+        let XprvsWithPaths(xprv, path, fp) = key;
+        let ex_xpub: ExtendedKey<miniscript::Segwitv0> = xprv.into_extended_key().unwrap();
+        let xpub = ex_xpub.into_xpub(network, &secp256k1::Secp256k1::new());
+        XpubsWithPaths(xpub, path, fp)
+    }
+}
+
+pub fn generate_extended_priv_key(network: Network) -> Result<ExtendedPrivKey, Bip32Error> {
+    let mut entropy = [0u8; secp256k1::constants::SECRET_KEY_SIZE];
+    thread_rng().fill_bytes(&mut entropy);
+    ExtendedPrivKey::new_master(network, &entropy)
+}
+pub fn generate_wif(network: Network) -> String {
+    let mut entropy = [0u8; secp256k1::constants::SECRET_KEY_SIZE];
+    thread_rng().fill_bytes(&mut entropy);
+    PrivateKey {
+        compressed: true,
+        network,
+        key: secp256k1::SecretKey::from_slice(&entropy).expect("Error passing"),
+    }
+    .to_wif()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn get_a_harcoded_wallet() {
+        let external_descriptor = "wpkh(tprv8ZgxMBicQKsPdy6LMhUtFHAgpocR8GC6QmwMSFpZs7h6Eziw3SpThFfczTDh5rW2krkqffa11UpX3XkeTTB2FvzZKWXqPY54Y6Rq4AQ5R8L/84'/0'/0'/0/*)";
+        let internal_descriptor = "wpkh(tprv8ZgxMBicQKsPdy6LMhUtFHAgpocR8GC6QmwMSFpZs7h6Eziw3SpThFfczTDh5rW2krkqffa11UpX3XkeTTB2FvzZKWXqPY54Y6Rq4AQ5R8L/84'/0'/0'/1/*)";
+        let wallet = Wallet::new(
+            external_descriptor,
+            Some(internal_descriptor),
+            Network::Testnet,
+            MemoryDatabase::new(),
+            ElectrumBlockchain::from(Client::new("ssl://electrum.blockstream.info:60002").unwrap()),
+        )
+        .unwrap();
+        let address = wallet
+            .get_address(AddressIndex::New)
+            .unwrap()
+            .address_type()
+            .unwrap();
+        assert_eq!(format!("{}", address), "p2wpkh")
+    }
+
+    #[test]
+    fn bip44_derive_path_with_bip39() {
+        let test_mnemonic =
+            "aim bunker wash balance finish force paper analyst cabin spoon stable organ";
+        let num_child = 2;
+        // segwit/coin/account
+        let derive_base = "m/44'/0'/0'";
+        let network = Network::Bitcoin;
+
+        let wallet_xprvs = DerivedBip39Xprvs::new(
+            derive_base.into_derivation_path().unwrap(),
+            network,
+            num_child,
+            None,
+            Some(String::from(test_mnemonic)),
+        )
+        .unwrap();
+
+        // master m
+        assert_eq!(wallet_xprvs.master_xprv.depth, 0);
+
+        // from https://iancoleman.io/bip39/
+        let expected_xprvs = ["xprvA1Rm2Dm6Zgjc6yLcH1vyS1VuykpPMKCQmymmYFv9kSvpfZ51y8G6wzaZVC6BtphuiDKEXcsENy3RbwLa3Nqwb9VBQvQagEG6J5EK76aTjmh","xprvA1Rm2Dm6Zgjc8zwffxi6Bb9dX5V14mvLRPVo72J3Q8C5BHRyACD7Ywk2L7ovf5fo8WcBQ7Janoba9fQXjXuY5wQaRfzj5ahZkPBZY449suQ"];
+
+        // derive n childs int/ext m/0'/n'
+        wallet_xprvs.xprv_w_paths.into_iter().enumerate().for_each(
+            |(i, XprvsWithPaths(key, path, _))| {
+                assert_eq!(format!("{}", path), format!("m/44'/0'/0'/{}", i));
+                assert_eq!(key.to_string(), expected_xprvs[i]);
+                assert_eq!(key.depth, 4);
+            },
+        );
+    }
+
+    #[test]
+    fn generate_a_bip39_wallet_with_n_keys_from_path() {
+        // /coin/account
+        let derive_base = "m/44'/0'/0'";
+        let network = Network::Testnet;
+        let wallet_xprvs = DerivedBip39Xprvs::new(
+            derive_base.into_derivation_path().unwrap(),
+            network,
+            2,
+            Some(String::from("mypass")),
+            None,
+        )
+        .unwrap();
+
+        let descriptors: WalletDescriptors = (wallet_xprvs.xprv_w_paths, network).into();
+        println!("Descr {:#?}", serde_json::to_string(&descriptors));
+        let wallet_cfg = WalletCfg {
+            name: String::from("my test"),
+            descriptors,
+            address_look_ahead: 2,
+            db_path: None,
+            server_uri: Some("ssl://electrum.blockstream.info:50002".into()),
+        };
+        let wallet: ElectrumMemoryWallet = wallet_cfg.into();
+        let address = wallet.get_address(AddressIndex::New).unwrap();
+        assert_eq!(format!("{}", address.address_type().unwrap()), "p2wpkh");
+    }
+    #[test]
+    fn electrum_sled() {
+        // segwit/coin/account
+        let derive_base = "m/44'/0'/0'";
+        let network = Network::Testnet;
+        let wallet_xprvs = DerivedBip39Xprvs::new(
+            derive_base.into_derivation_path().unwrap(),
+            network,
+            2,
+            Some(String::from("mypass")),
+            None,
+        )
+        .unwrap();
+
+        let descriptors: WalletDescriptors =
+            AnyDescriptorCfg::Wpkh(wallet_xprvs.xprv_w_paths, network).into();
+        let wallet_cfg = WalletCfg {
+            name: String::from("mytest2"),
+            descriptors,
+            address_look_ahead: 2,
+            db_path: Some(String::from("/tmp/sifir-bdk")),
+            server_uri: Some("ssl://electrum.blockstream.info:50002".into()),
+        };
+        let wallet: ElectrumSledWallet = wallet_cfg.into();
+        let address = wallet.get_address(AddressIndex::New).unwrap();
+        assert_eq!(format!("{}", address.address_type().unwrap()), "p2wpkh");
+    }
+
+    #[test]
+    fn txn_from_create_txn_json() {
+        let rcvr_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8e5FKc3Mdn1ByJgZ2GBBA4DFZ2tAzmtquHHPhRtRFmq1M8a3je1DXhRu2Dnx6db3GKmavKbku5sdkcAzWBHwi1KVoNMi4V3oox4vfrvuyNs/0\'/0/*)\",\"internal\":\"wpkh([547f0cd3/0\'/1]tprv8e5FKc3Mdn1C3eHRQ4pBZR13wHTHpX1umHgPpQv9HDjA5MRUKmRQqjWic6gfSAp6CDyM8B3ur3jkayG7E8yG5eNj3ZcCEJnuaKa14Q9Tf9W/0\'/1/*)#63l9gmuk\",\"public\":\"wpkh([547f0cd3/0\'/0/0\']tpubDCYJ5ZRDkRcFtTQZzetaWVS6q52rs3RTAKXYMWEvGCR6Nb1LTFpdwGohYQ4f98aVE6NxYN3tru8kziP9vZhDYZYDd5VDERyFr8U5WeCbGHy/0/*)#knhduycc\"},\"address_look_ahead\":2}").unwrap();
+        let sender_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test_2\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8dWQe989ftsPNn9NddyKVri3GHs4voe2E4xS75oX9neHeQGCnbn2ru3o1mbxmW2SnNRtpMdaopc6GWftoGMyhKPX3zjCBTKU1Ckw6E6NmQL/0\'/0/*)\",\"internal\":\"wpkh([0776ff86/0\'/1]tprv8dWQe989ftsPRPriFR6w1cG3R2s5FBxXsDscygXe8RiaUQrRkA7J8FFJwTPRBoLia7fqVB8s87SQ5rLnVjbZfDpuorRkBBqrSHKVbhUMYmq/0\'/1/*)#ynv3pma4\",\"public\":\"wpkh([0776ff86/0\'/0/0\']tpubDCmXi7Tx4hixdHtw4WVgnSAsDJ4Q8oR3NSq6DYRmCC46hihokPaHo3RAdaSQza8sWtAU63zt5VgkgYt6tUmZQWqVZio5vptzgrNMmrRwcBF/0/*)#cn8qlh6k\"},\"address_look_ahead\":2}").unwrap();
+
+        let rcvr_wallet: ElectrumMemoryWallet = rcvr_wallet_cfg.into();
+        let sender_wallet: ElectrumMemoryWallet = sender_wallet_cfg.into();
+
+        let recipients = (1..3)
+            .map(|i| {
+                (
+                    rcvr_wallet
+                        .get_address(AddressIndex::New)
+                        .unwrap()
+                        .to_string(),
+                    1000 * i,
+                )
+            })
+            .collect();
+        let txn = CreateTx {
+            recipients,
+            fee_type: FeeType::Rate,
+            fee: 4.0,
+            spend_change: SpendChangePolicy::Yes,
+            enable_rbf: true,
+        };
+
+        let txn_json = serde_json::to_string(&txn).unwrap();
+        println!("txn json {}", txn_json);
+        let txn: CreateTx = serde_json::from_str(&txn_json).unwrap();
+
+        let wallet_txn = txn.into_wallet_txn(&sender_wallet).unwrap();
+        println!("txn wallet {:?} {:?}", wallet_txn.0, wallet_txn.1);
+    }
+    #[test]
+    #[ignore]
+    fn can_sync_wallet_and_sign_utxos() {
+        let rcvr_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8e5FKc3Mdn1ByJgZ2GBBA4DFZ2tAzmtquHHPhRtRFmq1M8a3je1DXhRu2Dnx6db3GKmavKbku5sdkcAzWBHwi1KVoNMi4V3oox4vfrvuyNs/0\'/0/*)\",\"internal\":\"wpkh([547f0cd3/0\'/1]tprv8e5FKc3Mdn1C3eHRQ4pBZR13wHTHpX1umHgPpQv9HDjA5MRUKmRQqjWic6gfSAp6CDyM8B3ur3jkayG7E8yG5eNj3ZcCEJnuaKa14Q9Tf9W/0\'/1/*)#63l9gmuk\",\"public\":\"wpkh([547f0cd3/0\'/0/0\']tpubDCYJ5ZRDkRcFtTQZzetaWVS6q52rs3RTAKXYMWEvGCR6Nb1LTFpdwGohYQ4f98aVE6NxYN3tru8kziP9vZhDYZYDd5VDERyFr8U5WeCbGHy/0/*)#knhduycc\"},\"address_look_ahead\":2,\"server_uri\": \"ssl://electrum.blockstream.info:60002\"}").unwrap();
+        let sender_wallet_cfg:WalletCfg = serde_json::from_str( "{\"name\":\"my test_2\",\"descriptors\":{\"network\":\"testnet\",\"external\":\"wpkh(tprv8dWQe989ftsPNn9NddyKVri3GHs4voe2E4xS75oX9neHeQGCnbn2ru3o1mbxmW2SnNRtpMdaopc6GWftoGMyhKPX3zjCBTKU1Ckw6E6NmQL/0\'/0/*)\",\"internal\":\"wpkh([0776ff86/0\'/1]tprv8dWQe989ftsPRPriFR6w1cG3R2s5FBxXsDscygXe8RiaUQrRkA7J8FFJwTPRBoLia7fqVB8s87SQ5rLnVjbZfDpuorRkBBqrSHKVbhUMYmq/0\'/1/*)#ynv3pma4\",\"public\":\"wpkh([0776ff86/0\'/0/0\']tpubDCmXi7Tx4hixdHtw4WVgnSAsDJ4Q8oR3NSq6DYRmCC46hihokPaHo3RAdaSQza8sWtAU63zt5VgkgYt6tUmZQWqVZio5vptzgrNMmrRwcBF/0/*)#cn8qlh6k\"},\"address_look_ahead\":2},\"server_uri\": \"ssl://electrum.blockstream.info:60002\"}").unwrap();
+
+        let rcvr_wallet: ElectrumMemoryWallet = rcvr_wallet_cfg.into();
+        let sender_wallet: ElectrumMemoryWallet = sender_wallet_cfg.into();
+
+        println!(
+            "rcvr add {}",
+            rcvr_wallet.get_address(AddressIndex::New).unwrap()
+        );
+        struct SifirWallet {} // TODO SifirWallet<T=WalletType>
+        impl Progress for SifirWallet {
+            fn update(&self, progress: f32, message: Option<String>) -> Result<(), bdk::Error> {
+                println!("progress is {} and message {:?}", progress, message);
+                Ok(())
+            }
+        }
+        let sync_result = sender_wallet.sync(SifirWallet {}, Some(100));
+        sync_result.unwrap();
+
+        let balance = sender_wallet.get_balance().unwrap();
+        assert!(balance > 100);
+        let mut txn = sender_wallet.build_tx();
+        txn.add_recipient(
+            rcvr_wallet
+                .get_address(AddressIndex::New)
+                .unwrap()
+                .script_pubkey(),
+            1000,
+        )
+        .fee_rate(FeeRate::from_sat_per_vb(5.0))
+        .do_not_spend_change()
+        .enable_rbf();
+
+        let (mut psbt, _tx_details) = txn.finish().unwrap();
+        let ok = sender_wallet.sign(&mut psbt, Default::default()).unwrap();
+        assert!(ok);
+        let _txn_id = sender_wallet.broadcast(psbt.extract_tx()).unwrap();
+    }
+}

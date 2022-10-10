@@ -30,13 +30,14 @@ type G = AuthenticatedConn<TcpStream, F>;
 lazy_static! {
     pub static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
         tokio::runtime::Builder::new_multi_thread()
-            .max_blocking_threads(num_cpus::get() / 2)
+            .max_blocking_threads(if num_cpus::get() > 4  {2} else  {1})
             .thread_name_fn(|| {
                 static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
                 let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
                 format!("sifir-thread-pool-{}", id)
             })
-            .on_thread_start(|| { debug!("thread started on {} cpus", num_cpus::get()) })
+            .on_thread_start(|| { debug!("thread started")})
+            .thread_keep_alive(Duration::from_secs(3))
             .on_thread_stop(|| { debug!("thread stopped") })
             .enable_all()
             .build()
@@ -186,7 +187,15 @@ impl TryFrom<TorServiceParam> for TorService {
             .flag(TorFlag::ControlPortAuto)
             .flag(TorFlag::CookieAuthentication(libtor::TorBool::True))
             .flag(TorFlag::ControlPortWriteToFile(ctl_file_path.clone()))
-            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True));
+            .flag(TorFlag::ControlPortFileGroupReadable(libtor::TorBool::True))
+            .flag(TorFlag::LogTo(
+                libtor::LogLevel::Debug,
+                libtor::LogDestination::File(info_log_path),
+            ))
+            .flag(TorFlag::LogTo(
+                libtor::LogLevel::Err,
+                libtor::LogDestination::File(error_log_path),
+            ));
         // // Android logging to android
         // #[cfg(target_os = "android")]
         // {
@@ -216,7 +225,7 @@ impl TryFrom<TorServiceParam> for TorService {
                     };
                     let data: Vec<&str> = t.split("PORT=").collect();
                     control_port = data[1].into();
-                    info!("success with config port {}!", control_port);
+                    info!("success with control port {}!", control_port);
                     is_ready = true;
                 }
                 Err(e) => {
@@ -365,10 +374,7 @@ impl OwnedTorService {
             .compat(),
         )
     }
-    pub fn delete_hidden_service(
-        &mut self,
-        onion: String,
-    ) -> Result<(), TorErrors> {
+    pub fn delete_hidden_service(&mut self, onion: String) -> Result<(), TorErrors> {
         (*RUNTIME).lock().unwrap().block_on(
             async {
                 let mut _ctl = self._ctl.borrow_mut();
@@ -377,8 +383,8 @@ impl OwnedTorService {
                     .ok_or(TorErrors::BootStrapError(String::from("Error mut lock")))?;
 
                 ctl.del_onion(&onion)
-                .await
-                .map_err(TorErrors::ControlConnectionError)?;
+                    .await
+                    .map_err(TorErrors::ControlConnectionError)?;
 
                 info!("Hidden serviec deleted !");
                 Ok(())
@@ -444,6 +450,7 @@ where
                             .get_info("status/bootstrap-phase")
                             .await
                             .map_err(TorErrors::ControlConnectionError)?;
+                        debug!("wait_bootstrap::{}", input);
                         std::thread::sleep(std::time::Duration::from_millis(300));
                     }
                     Ok(true)
