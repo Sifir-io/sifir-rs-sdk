@@ -795,11 +795,13 @@ fn to_java_util_optional_int(env: *mut JNIEnv, x: Option<i32>) -> jobject {
 }
 use jni_sys::*;
 use logger::{log, Logger};
+use serde::Serialize;
 use std::time::Duration;
 use tor::{
-    hidden_service::HiddenServiceHandler,
+    hidden_service::{HiddenServiceDataHandler, HiddenServiceHandler},
     tcp_stream::{DataObserver, TcpSocksStream},
-    OwnedTorService, TorHiddenService, TorHiddenServiceParam, TorServiceParam,
+    BootstrapPhase, OwnedTorService, OwnedTorServiceBootstrapPhase, TorHiddenService,
+    TorHiddenServiceParam, TorServiceParam,
 };
 unsafe impl Send for Observer {}
 unsafe impl Sync for Observer {}

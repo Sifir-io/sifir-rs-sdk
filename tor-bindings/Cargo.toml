@@ -1,0 +1,13 @@
+[package]
+name = "tor-bindings"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+tor = { path = "../tor" }
+
+[build-dependencies]
+flapigen = "0.8.0"
+
+[lib]
+crate-type = ["staticlib", "cdylib"]

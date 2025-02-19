@@ -2,20 +2,15 @@
 
 [workspace]
 
-members =[
-    "tor",
-    "utils",
-    "sifir-android",
-    "sifir-ios",
-    "logger"
-]
+members = ["tor", "utils", "sifir-android", "sifir-ios", "logger", "tor-bindings"]
+
+resolver = "2"
 
 [profile.dev]
 opt-level = "s"
 
 [profile.release]
-opt-level="z"
+opt-level = "z"
 lto = true
 codegen-units = 1
 #strip = "symbols"
-

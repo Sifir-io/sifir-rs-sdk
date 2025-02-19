@@ -1,0 +1,114 @@
+use std::time::Duration;
+use logger::{log, Logger};
+use serde::Serialize;
+use tor::{
+    hidden_service::{HiddenServiceDataHandler, HiddenServiceHandler},
+    tcp_stream::{DataObserver, TcpSocksStream},
+    BootstrapPhase, OwnedTorService, OwnedTorServiceBootstrapPhase, TorHiddenService,
+    TorHiddenServiceParam, TorServiceParam,
+};
+
+// C++ callback interface for DataObserver
+foreign_callback!(callback DataObserver {
+    self_type DataObserver;
+    onData = DataObserver::on_data(&self, result: String);
+    onError = DataObserver::on_error(&self, result: String);
+});
+
+struct Observer {
+    cb: Box<dyn DataObserver>,
+}
+
+unsafe impl Send for Observer {}
+unsafe impl Sync for Observer {}
+
+impl DataObserver for Observer {
+    fn on_data(&self, data: String) {
+        self.cb.on_data(data);
+    }
+    fn on_error(&self, data: String) {
+        self.cb.on_error(data);
+    }
+}
+
+// HiddenServiceHandler
+foreign_class!(class HiddenServiceHandler {
+    self_type HiddenServiceHandler;
+    constructor new(dst_port: u16, cb: Box<dyn DataObserver>) -> HiddenServiceHandler {
+        let mut handler = HiddenServiceHandler::new(dst_port).expect("Failed to create handler");
+        handler.set_data_handler(Observer { cb }).expect("Failed to set handler");
+        handler.start_http_listener().expect("Failed to start listener");
+        handler
+    }
+});
+
+// TorHiddenService - this one doesn't need constructor as it's created by OwnedTorService
+foreign_class!(class TorHiddenService {
+    self_type TorHiddenService;
+    private constructor = empty;
+    fn getOnionUrl(&self) -> String {
+        self.onion_url.to_string()
+    }
+});
+
+// TorServiceParam
+foreign_class!(class TorServiceParam {
+    self_type TorServiceParam;
+    constructor new(data_dir: String, socks_port: u16, bootstrap_timeout_ms: u64) -> TorServiceParam {
+        TorServiceParam::new(&data_dir, socks_port, bootstrap_timeout_ms)
+    }
+});
+
+// OwnedTorService
+foreign_class!(class OwnedTorService {
+    self_type OwnedTorService;
+    constructor new(param: TorServiceParam) -> OwnedTorService {
+        Logger::new();
+        OwnedTorService::new(param).expect("Failed to create TorService")
+    }
+
+    fn getSocksPort(&self) -> u16 {
+        self.socks_port
+    }
+
+    fn shutdown(&mut self) {
+        let _ = self.shutdown();
+    }
+
+    fn getStatus(&self) -> String {
+        match self.get_status() {
+            Ok(status) => serde_json::to_string(&status).unwrap_or_default(),
+            Err(e) => e.to_string()
+        }
+    }
+
+    fn createHiddenService(&mut self, dst_port: u16, hs_port: u16) -> TorHiddenService {
+        self.create_hidden_service(TorHiddenServiceParam {
+            to_port: dst_port,
+            hs_port,
+            secret_key: None,
+        }).expect("Failed to create hidden service")
+    }
+
+    fn deleteHiddenService(&mut self, onion: String) {
+        let _ = self.delete_hidden_service(onion);
+    }
+});
+
+// TcpSocksStream
+foreign_class!(class TcpSocksStream {
+    self_type TcpSocksStream;
+    constructor new(target: String, socks_proxy: String, timeout_ms: u64) -> TcpSocksStream {
+        TcpSocksStream::new_timeout(target, socks_proxy, timeout_ms)
+            .expect("Failed to create TCP stream")
+    }
+
+    fn setDataHandler(&mut self, cb: Box<dyn DataObserver>) {
+        self.set_data_handler(Observer { cb }).expect("Failed to set handler");
+        self.read_line_async().expect("Failed to start async read");
+    }
+
+    fn sendData(&mut self, msg: String, timeout_secs: u64) {
+        let _ = self.send_data(msg, Some(Duration::from_secs(timeout_secs)));
+    }
+});

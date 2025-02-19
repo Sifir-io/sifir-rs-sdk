@@ -1,5 +1,4 @@
 #!/bin/bash
-
 # Exit on error
 set -e
 
@@ -16,18 +15,22 @@ rustup target add \
     x86_64-linux-android \
     i686-linux-android
 
+# Define variables
+MANIFEST_PATH="./tor-bindings/Cargo.toml"
+OUTPUT_DIR="target/jniLibs"
+
 # Create output directory
-mkdir -p target/android
+mkdir -p "$OUTPUT_DIR"
 
 # Then, build the library
 echo "Building for Android..."
 cargo ndk \
-    --manifest-path="./sifir-android/Cargo.toml" \
+    --manifest-path="$MANIFEST_PATH" \
     --platform 30 \
     -t arm64-v8a \
     -t x86 \
     -t x86_64 \
-    --output-dir "target/android" \
-    build --release \
+    --output-dir "$OUTPUT_DIR" \
+    build --release
 
 echo "Android build complete!"
