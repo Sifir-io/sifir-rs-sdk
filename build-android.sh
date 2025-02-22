@@ -16,7 +16,7 @@ rustup target add \
     i686-linux-android
 
 # Define variables
-MANIFEST_PATH="./tor-bindings/Cargo.toml"
+MANIFEST_PATH="./tor/Cargo.toml"
 OUTPUT_DIR="target/jniLibs"
 
 # Create output directory

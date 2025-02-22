@@ -1,3 +1,4 @@
+pub mod ffi;
 pub mod hidden_service;
 pub mod tcp_stream;
 use futures::Future;
@@ -22,7 +23,12 @@ use tokio_compat_02::FutureExt;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
 
-type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>>;
+//type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>>;
+type F = Box<
+    dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>
+        + Send
+        + Sync,
+>;
 type G = AuthenticatedConn<TcpStream, F>;
 
 lazy_static! {
@@ -477,6 +483,7 @@ where
     // to shutdown
     //fn shutdown(self) {}
 }
+
 #[cfg(test)]
 mod tests {
     use super::*;

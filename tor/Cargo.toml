@@ -22,15 +22,19 @@ thiserror = "1.0.24"
 num_cpus = "1.0"
 tokio-compat-02 = "0.2"
 httparse = "1.10.0"
+cxx = "1.0"
 
 [dev-dependencies]
 serial_test = "*"
 utils = { path = "../utils" }
 
+[build-dependencies]
+cxx-build = "1.0"
+
 
 [[example]]
 name = "hs_bind"
 #required-features = ["cli-utils", "esplora"]
-#[lib]
-#crate-type = ["staticlib", "cdylib"]
+[lib]
+crate-type = ["staticlib", "cdylib"]
 #crate-type = ["lib", "cdylib"]
