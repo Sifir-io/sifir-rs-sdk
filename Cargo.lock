@@ -34,6 +34,18 @@ checksum = "5ecc8056bf6ab9892dcd53216c83d1597487d7dacac16c8df6b877d127df9937"
 
 [[package]]
 name = "android_logger"
+version = "0.13.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "c494134f746c14dc653a35a4ea5aca24ac368529da5370ecf41fe0341c35772f"
+dependencies = [
+ "android_log-sys",
+ "env_logger 0.10.2",
+ "log",
+ "once_cell",
+]
+
+[[package]]
+name = "android_logger"
 version = "0.14.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05b07e8e73d720a1f2e4b6014766e6039fd2e96a4fa44e2a78d0e1fa2ff49826"
@@ -574,6 +586,16 @@ name = "env_filter"
 version = "0.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "186e05a59d4c50738528153b83b0b0194d3a29507dfec16eccd4b342903397d0"
+dependencies = [
+ "log",
+ "regex",
+]
+
+[[package]]
+name = "env_logger"
+version = "0.10.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4cd405aab171cb85d6735e5c8d9db038c17d3ca007a4d2c25f337935c3d90580"
 dependencies = [
  "log",
  "regex",
@@ -1370,8 +1392,8 @@ dependencies = [
 name = "logger"
 version = "0.1.0"
 dependencies = [
- "android_logger",
- "env_logger",
+ "android_logger 0.14.1",
+ "env_logger 0.11.6",
  "log",
  "log-panics",
 ]
@@ -2526,6 +2548,7 @@ dependencies = [
 name = "tor"
 version = "0.1.0"
 dependencies = [
+ "android_logger 0.13.3",
  "anyhow",
  "base64 0.22.1",
  "cxx",
@@ -2534,6 +2557,7 @@ dependencies = [
  "httparse",
  "lazy_static",
  "libtor",
+ "log",
  "logger",
  "num_cpus",
  "serde",

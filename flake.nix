@@ -182,6 +182,7 @@
             automake
             libtool
             openssl
+            rustup
           ];
 
           darwinPackages = with pkgs; [
