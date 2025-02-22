@@ -67,23 +67,25 @@ cargo build --release \
 
 
 # Create temporary directories for the frameworks
-mkdir -p ios-device/Headers ios-simulator/Headers
+mkdir -p target/ios/ios-device/Headers target/ios/ios-simulator/Headers
 
-rm -rf Tor.xcframework TorCxxBridge.xcframework
+rm -rf target/ios/Tor.xcframework target/ios/TorCxxBridge.xcframework
+HEADERS_DIR_IOS="target/ios/ios-device/Headers"
+HEADERS_DIR_IOS_SIM="target/ios/ios-simulator/Headers"
 
 # Create the framework structures
 # Create XCFramework for the main library
 xcodebuild -create-xcframework \
   -library target/ios/aarch64-apple-ios/release/$BINARY_NAME \
-  -headers ios-device/Headers \
+  -headers $HEADERS_DIR_IOS \
   -library target/ios/aarch64-apple-ios-sim/release/$BINARY_NAME \
-  -headers ios-simulator/Headers \
-  -output Tor.xcframework
+  -headers $HEADERS_DIR_IOS_SIM \
+  -output target/ios/Tor.xcframework
 
 # Create XCFramework for the cxxbridge library
 xcodebuild -create-xcframework \
   -library $CXX_BINARY_PATH_IOS \
-  -headers ios-device/Headers \
+  -headers $HEADERS_DIR_IOS \
   -library $CXX_BINARY_PATH_IOS_SIM \
-  -headers ios-simulator/Headers \
-  -output TorCxxBridge.xcframework
+  -headers $HEADERS_DIR_IOS_SIM \
+  -output target/ios/TorCxxBridge.xcframework

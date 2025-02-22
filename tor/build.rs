@@ -1,17 +1,13 @@
 fn main() {
-    cxx_build::bridge("src/ffi.rs") // Assumes your CXX bridge code is in lib.rs
+    cxx_build::bridge("src/ffi.rs")
         .flag_if_supported("-std=c++14")
-        .compile("tor-bindings");
+        .flag_if_supported("-fexceptions") // Enable exceptions
+        .flag_if_supported("-frtti") // Enable RTTI
+        .compile("cxxbridge1");
 
-    // Let cargo know to regenerate if these files change
+    println!("cargo:rerun-if-changed=src/ffi.rs");
     println!("cargo:rerun-if-changed=src/lib.rs");
 
-    // Add any system dependencies required by libtor
+    // Add any system dependencies
     println!("cargo:rustc-link-lib=tor");
-
-    // Tell cargo where to find the library
-    println!(
-        "cargo:rustc-link-search=native={}",
-        std::env::var("OUT_DIR").unwrap()
-    );
 }
