@@ -2,9 +2,9 @@ pub mod ffi;
 pub mod hidden_service;
 pub mod tcp_stream;
 use futures::Future;
-use lazy_static::*;
 use libtor::{Tor, TorAddress, TorFlag};
 use logger::log::*;
+use once_cell::sync::OnceCell;
 use serde::{Deserialize, Serialize};
 use std::cell::RefCell;
 use std::convert::{TryFrom, TryInto};
@@ -31,21 +31,26 @@ type F = Box<
 >;
 type G = AuthenticatedConn<TcpStream, F>;
 
-lazy_static! {
-    pub static ref RUNTIME: Mutex<tokio::runtime::Runtime> = Mutex::new(
-        tokio::runtime::Builder::new_multi_thread()
-            .max_blocking_threads(num_cpus::get() / 2)
-            .thread_name_fn(|| {
-                static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
-                let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
-                format!("sifir-thread-pool-{}", id)
-            })
-            .on_thread_start(|| { debug!("thread started on {} cpus", num_cpus::get()) })
-            .on_thread_stop(|| { debug!("thread stopped") })
-            .enable_all()
-            .build()
-            .unwrap()
-    );
+// Replace lazy_static with once_cell for better initialization control
+static RUNTIME: OnceCell<Mutex<tokio::runtime::Runtime>> = OnceCell::new();
+
+pub fn ensure_runtime() -> &'static Mutex<tokio::runtime::Runtime> {
+    RUNTIME.get_or_init(|| {
+        Mutex::new(
+            tokio::runtime::Builder::new_multi_thread()
+                .max_blocking_threads(num_cpus::get() / 2)
+                .thread_name_fn(|| {
+                    static ATOMIC_ID: AtomicUsize = AtomicUsize::new(0);
+                    let id = ATOMIC_ID.fetch_add(1, Ordering::SeqCst);
+                    format!("sifir-thread-pool-{}", id)
+                })
+                .on_thread_start(|| debug!("thread started on {} cpus", num_cpus::get()))
+                .on_thread_stop(|| debug!("thread stopped"))
+                .enable_all()
+                .build()
+                .unwrap(),
+        )
+    })
 }
 
 #[repr(C)]
@@ -285,7 +290,7 @@ impl TorService {
     /// and returning an OwnedTorService which is fully bootstrapped and under our control
     /// (If we drop this object the Tor daemon will shut down)
     pub fn into_owned_node(self) -> Result<OwnedTorService, TorErrors> {
-        (*RUNTIME).lock().unwrap().block_on(
+        ensure_runtime().lock().unwrap().block_on(
             async {
                 let mut ac = self
                     .get_control_auth_conn(Some(Box::new(handler) as F))
@@ -328,7 +333,7 @@ impl OwnedTorService {
         &mut self,
         param: TorHiddenServiceParam,
     ) -> Result<TorHiddenService, TorErrors> {
-        (*RUNTIME).lock().unwrap().block_on(
+        ensure_runtime().lock().unwrap().block_on(
             async {
                 let mut _ctl = self._ctl.borrow_mut();
                 let ctl = _ctl
@@ -370,7 +375,7 @@ impl OwnedTorService {
         )
     }
     pub fn delete_hidden_service(&mut self, onion: String) -> Result<(), TorErrors> {
-        (*RUNTIME).lock().unwrap().block_on(
+        ensure_runtime().lock().unwrap().block_on(
             async {
                 let mut _ctl = self._ctl.borrow_mut();
                 let ctl = _ctl
@@ -392,7 +397,7 @@ impl OwnedTorService {
     /// OwnedTorServiceBootstrapPhase will either be Done or Other(String) containing the stage of
     /// the boostrap the node is a
     pub fn get_status(&self) -> Result<OwnedTorServiceBootstrapPhase, TorErrors> {
-        (*RUNTIME).lock().unwrap().block_on(
+        ensure_runtime().lock().unwrap().block_on(
             async {
                 let mut ctl = self._ctl.borrow_mut();
                 let r = ctl

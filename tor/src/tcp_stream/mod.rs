@@ -1,5 +1,5 @@
+use crate::ensure_runtime;
 use crate::TorErrors;
-use crate::RUNTIME;
 use socks::Socks5Stream;
 use std::io::BufRead;
 use std::io::Write;
@@ -41,12 +41,12 @@ impl TcpSocksStream {
         socks_proxy: String,
         timeout_ms: u64,
     ) -> Result<Self, TorErrors> {
-        let socks_future = (*RUNTIME)
+        let socks_future = ensure_runtime()
             .lock()
             .unwrap()
             .spawn(async move { TcpSocksStream::new(target, socks_proxy) });
 
-        (*RUNTIME)
+        ensure_runtime()
             .lock()
             .unwrap()
             .block_on(async move { timeout(Duration::from_millis(timeout_ms), socks_future).await })
@@ -58,7 +58,7 @@ impl TcpSocksStream {
     where
         F: DataObserver + Send + Sync + 'static,
     {
-        (*RUNTIME).lock().unwrap().block_on(async move {
+        ensure_runtime().lock().unwrap().block_on(async move {
             let data_clone = self.data_handler.clone();
             let mut data_write = data_clone.write().await;
             *data_write = Some(Box::new(callback));
@@ -75,7 +75,7 @@ impl TcpSocksStream {
             .map_err(|_| TorErrors::TcpStreamError(String::from("Error cloning tcp stream")))?;
         let cb_clone = self.data_handler.clone();
 
-        (*RUNTIME).lock().unwrap().spawn(async move {
+        ensure_runtime().lock().unwrap().spawn(async move {
             let mut read_buf = read_buf_clone.write().await;
                     loop {
                         let mut string_buf = String::new();
@@ -119,7 +119,7 @@ impl TcpSocksStream {
     {
         let tcp_stream = self.stream.get_ref().try_clone()?;
         let mut reader = std::io::BufReader::new(tcp_stream.try_clone()?);
-        let _lsner_handle = (*RUNTIME).lock().unwrap().spawn_blocking(move || {
+        let _lsner_handle = ensure_runtime().lock().unwrap().spawn_blocking(move || {
             loop {
                 let mut string_buf = String::new();
                 match reader.read_line(&mut string_buf) {

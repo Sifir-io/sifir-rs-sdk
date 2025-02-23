@@ -1,13 +1,16 @@
 #[cfg(target_os = "android")]
 use android_logger::{Config, FilterBuilder};
-use log::{info, LevelFilter};
+use log::info;
+use once_cell::sync::OnceCell;
+
+static INITIALIZED: OnceCell<bool> = OnceCell::new();
 
 // Add this function to initialize logging
 pub fn init_logging() {
     #[cfg(target_os = "android")]
     android_logger::init_once(
         Config::default()
-            .with_max_level(LevelFilter::Debug)
+            .with_max_level(log::LevelFilter::Debug)
             .with_tag("RustTor") // This will be your logcat tag
             .with_filter(FilterBuilder::new().parse("debug,tor=debug").build()),
     );
@@ -16,6 +19,9 @@ pub fn init_logging() {
 #[cxx::bridge(namespace = "tor")]
 mod ffi {
     extern "Rust" {
+        // Add initialization function
+        fn initialize_tor_library() -> bool;
+
         // Initialize Tor service with direct parameters
         fn init_tor_service(socks_port: u16, data_dir: &str, timeout_ms: u64) -> bool;
 
@@ -38,24 +44,47 @@ mod ffi {
     }
 }
 
+use logger::log::debug;
 use std::sync::Mutex;
 
-// Global state management for the Tor service
-use lazy_static::lazy_static;
-use logger::log::debug;
-
 use crate::{
-    OwnedTorService, OwnedTorServiceBootstrapPhase, TorHiddenServiceParam, TorServiceParam,
+    ensure_runtime, OwnedTorService, OwnedTorServiceBootstrapPhase, TorHiddenServiceParam,
+    TorServiceParam,
 };
 
-lazy_static! {
-    static ref TOR_SERVICE: Mutex<Option<OwnedTorService>> = Mutex::new(None);
+// Global state management for the Tor service
+static TOR_SERVICE: OnceCell<Mutex<Option<OwnedTorService>>> = OnceCell::new();
+
+fn ensure_tor_service() -> &'static Mutex<Option<OwnedTorService>> {
+    TOR_SERVICE.get_or_init(|| Mutex::new(None))
+}
+
+// New initialization function
+fn initialize_tor_library() -> bool {
+    if INITIALIZED.get().is_some() {
+        return true;
+    }
+
+    #[cfg(target_os = "android")]
+    init_logging();
+
+    // Initialize runtime
+    let _ = ensure_runtime();
+
+    // Initialize TOR_SERVICE
+    let _ = ensure_tor_service();
+
+    match INITIALIZED.set(true) {
+        Ok(_) => true,
+        Err(_) => false,
+    }
 }
 
 // Implementation of the simplified interface
 fn init_tor_service(socks_port: u16, data_dir: &str, timeout_ms: u64) -> bool {
-    #[cfg(target_os = "android")]
-    init_logging();
+    if INITIALIZED.get().is_none() {
+        return false;
+    }
 
     info!("Rust FFI: Initializing Tor service with parameters: socks_port={}, data_dir={}, timeout_ms={}", socks_port, data_dir, timeout_ms);
 
@@ -72,8 +101,7 @@ fn init_tor_service(socks_port: u16, data_dir: &str, timeout_ms: u64) -> bool {
 
     match OwnedTorService::new(param) {
         Ok(service) => {
-            *TOR_SERVICE.lock().unwrap() = Some(service);
-
+            *ensure_tor_service().lock().unwrap() = Some(service);
             debug!("Rust FFI: Tor service initialized!");
             true
         }
@@ -90,11 +118,11 @@ fn create_hidden_service(
     key_data: &[u8; 64],
     has_key: bool,
 ) -> String {
-    let mut service_guard = TOR_SERVICE.lock().unwrap();
+    let mut service_guard = ensure_tor_service().lock().unwrap();
 
     info!(
-        "Rust FFI: Creating hidden service with parameters: port={}, target_port={}, key_data={:?}, has_key={}",
-        port, target_port, key_data, has_key
+        "Rust FFI: Creating hidden service with parameters: port={}, target_port={}, has_key={}",
+        port, target_port, has_key
     );
 
     if let Some(service) = service_guard.as_mut() {
@@ -119,7 +147,7 @@ fn create_hidden_service(
 }
 
 fn get_service_status() -> i32 {
-    let service_guard = TOR_SERVICE.lock().unwrap();
+    let service_guard = ensure_tor_service().lock().unwrap();
 
     match &*service_guard {
         Some(service) => match service.get_status() {
@@ -132,7 +160,7 @@ fn get_service_status() -> i32 {
 }
 
 fn delete_hidden_service(address: &str) -> bool {
-    let mut service_guard = TOR_SERVICE.lock().unwrap();
+    let mut service_guard = ensure_tor_service().lock().unwrap();
 
     if let Some(service) = service_guard.as_mut() {
         service.delete_hidden_service(address.to_string()).is_ok()
@@ -142,7 +170,7 @@ fn delete_hidden_service(address: &str) -> bool {
 }
 
 fn shutdown_service() -> bool {
-    let mut service_guard = TOR_SERVICE.lock().unwrap();
+    let mut service_guard = ensure_tor_service().lock().unwrap();
 
     if let Some(mut service) = service_guard.take() {
         service.shutdown().is_ok()

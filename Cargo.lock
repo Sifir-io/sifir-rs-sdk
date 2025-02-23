@@ -2169,15 +2169,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "signal-hook-registry"
-version = "1.4.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "a9e9e0b4211b72e7b8b6e85c807d36c212bdb33ea8587f7569562a84df5465b1"
-dependencies = [
- "libc",
-]
-
-[[package]]
 name = "signature"
 version = "1.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2443,7 +2434,6 @@ dependencies = [
  "libc",
  "mio 1.0.3",
  "pin-project-lite 0.2.16",
- "signal-hook-registry",
  "socket2 0.5.8",
  "windows-sys 0.52.0",
 ]
@@ -2555,11 +2545,11 @@ dependencies = [
  "cxx-build",
  "futures",
  "httparse",
- "lazy_static",
  "libtor",
  "log",
  "logger",
  "num_cpus",
+ "once_cell",
  "serde",
  "serde_json",
  "serial_test",
