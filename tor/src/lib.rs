@@ -92,6 +92,7 @@ pub struct TorHiddenServiceParam {
     pub secret_key: Option<[u8; 64]>,
 }
 
+#[derive(Debug)]
 pub struct TorHiddenService {
     pub onion_url: TorAddress,
     pub secret_key: [u8; 64],

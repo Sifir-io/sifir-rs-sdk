@@ -1,6 +1,6 @@
 #[cfg(target_os = "android")]
 use android_logger::{Config, FilterBuilder};
-use log::info;
+use log::{debug, info};
 use once_cell::sync::OnceCell;
 
 static INITIALIZED: OnceCell<bool> = OnceCell::new();
@@ -18,33 +18,106 @@ pub fn init_logging() {
 
 #[cxx::bridge(namespace = "tor")]
 mod ffi {
+    // Simple output structs with primitive types only
+    struct HiddenServiceResponse {
+        is_success: bool,
+        onion_address: String,
+        control: String,
+    }
+
+    struct StartTorResponse {
+        is_success: bool,
+        onion_address: String,
+        control: String,
+        error_message: String,
+    }
+
     extern "Rust" {
-        // Add initialization function
         fn initialize_tor_library() -> bool;
-
-        // Initialize Tor service with direct parameters
         fn init_tor_service(socks_port: u16, data_dir: &str, timeout_ms: u64) -> bool;
-
-        // Create hidden service with direct parameters
         fn create_hidden_service(
             port: u16,
             target_port: u16,
             key_data: &[u8; 64],
             has_key: bool,
-        ) -> String;
-
-        // Simple status check returning integer for state
-        fn get_service_status() -> i32; // 0 = not ready, 1 = ready, 2 = error
-
-        // Simple deletion with boolean result
+        ) -> HiddenServiceResponse;
+        fn start_tor_if_not_running(
+            data_dir: &str,
+            key_data: &[u8; 64],
+            has_key: bool,
+            socks_port: u16,
+            target_port: u16,
+            timeout_ms: u64,
+        ) -> StartTorResponse;
+        fn get_service_status() -> i32;
         fn delete_hidden_service(address: &str) -> bool;
-
-        // Simple shutdown with boolean result
         fn shutdown_service() -> bool;
     }
 }
 
-use logger::log::debug;
+// Implementation for start_tor_if_not_running
+fn start_tor_if_not_running(
+    data_dir: &str,
+    key_data: &[u8; 64],
+    has_key: bool,
+    socks_port: u16,
+    target_port: u16,
+    timeout_ms: u64,
+) -> ffi::StartTorResponse {
+    // First initialize library if needed
+    if !initialize_tor_library() {
+        return ffi::StartTorResponse {
+            is_success: false,
+            onion_address: String::new(),
+            control: String::new(),
+            error_message: "Failed to initialize Tor library".to_string(),
+        };
+    }
+
+    // Check current service status
+    let status = get_service_status();
+
+    // If the service is already ready (status = 1) or in progress (status = 0),
+    // we can attempt to create a hidden service without re-initializing
+    if status == 2 {
+        // Only initialize if status indicates error or not initialized
+        debug!(
+            "Rust FFI: Tor service needs initialization. Status: {}",
+            status
+        );
+
+        // Initialize Tor service
+        if !init_tor_service(socks_port, data_dir, timeout_ms) {
+            return ffi::StartTorResponse {
+                is_success: false,
+                onion_address: String::new(),
+                control: String::new(),
+                error_message: "Failed to initialize Tor service".to_string(),
+            };
+        }
+    } else {
+        debug!(
+            "Rust FFI: Tor service already initialized. Status: {}",
+            status
+        );
+    }
+
+    // Create hidden service
+    let hs_response = create_hidden_service(socks_port, target_port, key_data, has_key);
+
+    // Create a response with simple types only
+    ffi::StartTorResponse {
+        is_success: hs_response.is_success,
+        onion_address: hs_response.onion_address,
+        control: hs_response.control.trim().into(),
+        error_message: if hs_response.is_success {
+            String::new()
+        } else {
+            "Failed to create hidden service".to_string()
+        },
+    }
+}
+
 use std::sync::Mutex;
 
 use crate::{
@@ -59,7 +132,8 @@ fn ensure_tor_service() -> &'static Mutex<Option<OwnedTorService>> {
     TOR_SERVICE.get_or_init(|| Mutex::new(None))
 }
 
-// New initialization function
+// We first initialize the run times.
+// Then we check the global state
 fn initialize_tor_library() -> bool {
     if INITIALIZED.get().is_some() {
         return true;
@@ -86,7 +160,7 @@ fn init_tor_service(socks_port: u16, data_dir: &str, timeout_ms: u64) -> bool {
         return false;
     }
 
-    info!("Rust FFI: Initializing Tor service with parameters: socks_port={}, data_dir={}, timeout_ms={}", socks_port, data_dir, timeout_ms);
+    debug!("Rust FFI: Initializing Tor service with parameters: socks_port={}, data_dir={}, timeout_ms={}", socks_port, data_dir, timeout_ms);
 
     let param = TorServiceParam {
         socks_port: Some(socks_port),
@@ -94,7 +168,7 @@ fn init_tor_service(socks_port: u16, data_dir: &str, timeout_ms: u64) -> bool {
         bootstrap_timeout_ms: Some(timeout_ms),
     };
 
-    info!(
+    debug!(
         "Rust FFI: Initializing Tor service with parameters: {:?}",
         param
     );
@@ -117,7 +191,7 @@ fn create_hidden_service(
     target_port: u16,
     key_data: &[u8; 64],
     has_key: bool,
-) -> String {
+) -> ffi::HiddenServiceResponse {
     let mut service_guard = ensure_tor_service().lock().unwrap();
 
     info!(
@@ -133,16 +207,38 @@ fn create_hidden_service(
         };
 
         debug!(
-            "Rust FFI: Creating hidden service with parameters: {:?}",
-            param.to_port
+            "Rust FFI: Creating hidden service with parameters: {:?} and control port {} and control host {}",
+            param.to_port, service.control_port.split(":").last().unwrap(), service.control_port.split(":").next().unwrap()
         );
 
         match service.create_hidden_service(param) {
-            Ok(result) => result.onion_url.to_string(),
-            Err(_) => String::new(),
+            Ok(result) => {
+                debug!(
+                    "Rust FFI: Hidden service created {:?} {}",
+                    result, service.control_port
+                );
+                ffi::HiddenServiceResponse {
+                    is_success: true,
+                    onion_address: result.onion_url.to_string(),
+                    control: service.control_port.trim().into(),
+                }
+            }
+            Err(e) => {
+                debug!("Rust FFI: Error creating hidden service {:?}", e);
+                ffi::HiddenServiceResponse {
+                    is_success: false,
+                    onion_address: String::new(),
+                    control: String::new(),
+                }
+            }
         }
     } else {
-        String::new()
+        debug!("Rust FFI: No service created");
+        ffi::HiddenServiceResponse {
+            is_success: false,
+            onion_address: String::new(),
+            control: String::new(),
+        }
     }
 }
 

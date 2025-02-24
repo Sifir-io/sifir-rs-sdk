@@ -176,6 +176,7 @@
           scripts = darwinDerivations.scripts pkgs;
 
           basePackages = with pkgs; [
+            upx
             cargo-ndk
             androidSdk
             autoconf

@@ -37,33 +37,17 @@ cargo build --release \
     --target aarch64-apple-ios \
     --target-dir $TARGET_DIR
 
-# echo "Building for iOS (x86_64)..."
-# cargo build --release \
-#     --manifest-path="$MANIFEST_PATH" \
-#     --target x86_64-apple-ios \
-#     --target-dir "$TARGET_DIR"
+echo "Building for iOS (x86_64)..."
+cargo build --release \
+    --manifest-path="$MANIFEST_PATH" \
+    --target x86_64-apple-ios \
+    --target-dir "$TARGET_DIR"
 
 echo "Building for iOS (aarch64-sim)..."
 cargo build --release \
     --manifest-path="$MANIFEST_PATH" \
     --target aarch64-apple-ios-sim \
     --target-dir $TARGET_DIR
-
-# Create universal binary (optional)
-# echo "Creating universal binary..."
-# if [ -f "target/ios/aarch64-apple-ios/release/libsifir_ios.a" ] && \
-#    [ -f "target/ios/aarch64-apple-ios-sim/release/libsifir_ios.a" ]; then
-#     mkdir -p target/ios/universal
-#     lipo -create \
-#         target/ios/aarch64-apple-ios/release/libsifir_ios.a \
-#         target/ios/aarch64-apple-ios-sim/release/libsifir_ios.a \
-#         -output target/ios/universal/libsifir_ios.a
-#     echo "Universal binary created at target/ios/universal/libsifir_ios.a"
-# else
-#     echo "Warning: Could not create universal binary. One or both architecture builds are missing."
-# fi
-
-# echo "iOS build complete!"
 
 
 # Create temporary directories for the frameworks
