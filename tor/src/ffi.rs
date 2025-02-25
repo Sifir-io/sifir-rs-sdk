@@ -2,9 +2,21 @@
 use android_logger::{Config, FilterBuilder};
 use log::{debug, info};
 use once_cell::sync::OnceCell;
+use std::sync::Mutex;
 
 static INITIALIZED: OnceCell<bool> = OnceCell::new();
 
+use crate::{
+    ensure_runtime, OwnedTorService, OwnedTorServiceBootstrapPhase, TorHiddenServiceParam,
+    TorServiceParam,
+};
+
+// Global state management for the Tor service
+static TOR_SERVICE: OnceCell<Mutex<Option<OwnedTorService>>> = OnceCell::new();
+
+fn ensure_tor_service() -> &'static Mutex<Option<OwnedTorService>> {
+    TOR_SERVICE.get_or_init(|| Mutex::new(None))
+}
 // Add this function to initialize logging
 pub fn init_logging() {
     #[cfg(target_os = "android")]
@@ -118,20 +130,6 @@ fn start_tor_if_not_running(
     }
 }
 
-use std::sync::Mutex;
-
-use crate::{
-    ensure_runtime, OwnedTorService, OwnedTorServiceBootstrapPhase, TorHiddenServiceParam,
-    TorServiceParam,
-};
-
-// Global state management for the Tor service
-static TOR_SERVICE: OnceCell<Mutex<Option<OwnedTorService>>> = OnceCell::new();
-
-fn ensure_tor_service() -> &'static Mutex<Option<OwnedTorService>> {
-    TOR_SERVICE.get_or_init(|| Mutex::new(None))
-}
-
 // We first initialize the run times.
 // Then we check the global state
 fn initialize_tor_library() -> bool {
@@ -194,7 +192,7 @@ fn create_hidden_service(
 ) -> ffi::HiddenServiceResponse {
     let mut service_guard = ensure_tor_service().lock().unwrap();
 
-    info!(
+    debug!(
         "Rust FFI: Creating hidden service with parameters: port={}, target_port={}, has_key={}",
         port, target_port, has_key
     );
