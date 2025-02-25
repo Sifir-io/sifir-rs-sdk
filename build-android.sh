@@ -18,7 +18,7 @@ if [ -z "$ANDROID_HOME" ]; then
 fi
 
 # Set NDK paths
-NDK_VERSION="27.1.12297006"
+NDK_VERSION="26.1.10909125"
 NDK_PATH="$ANDROID_HOME/ndk/$NDK_VERSION"
 
 if [ ! -d "$NDK_PATH" ]; then

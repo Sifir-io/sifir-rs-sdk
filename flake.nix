@@ -37,6 +37,7 @@
           sdkPkgs: with sdkPkgs; [
             cmdline-tools-latest
             ndk-27-1-12297006
+            ndk-26-1-10909125
           ]
         );
 

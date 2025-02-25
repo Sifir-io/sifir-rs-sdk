@@ -1,6 +1,6 @@
 #[cfg(target_os = "android")]
 use android_logger::{Config, FilterBuilder};
-use log::{debug, info};
+use log::debug;
 use once_cell::sync::OnceCell;
 use std::sync::Mutex;
 
@@ -177,8 +177,8 @@ fn init_tor_service(socks_port: u16, data_dir: &str, timeout_ms: u64) -> bool {
             debug!("Rust FFI: Tor service initialized!");
             true
         }
-        Err(_) => {
-            debug!("Rust FFI: Error initializing Tor service!");
+        Err(e) => {
+            debug!("Rust FFI: Error initializing Tor service! {:?}", e);
             false
         }
     }
