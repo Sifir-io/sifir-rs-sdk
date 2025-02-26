@@ -166,12 +166,11 @@ impl HiddenServiceHandler {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{OwnedTorService, TorHiddenServiceParam, TorService, TorServiceParam};
+    use crate::{OwnedTorService, TorHiddenServiceParam, TorServiceParam};
     use logger::Logger;
-    use serial_test::serial;
-    use std::borrow::{Borrow, BorrowMut};
+    
+    
     use std::convert::TryInto;
-    use std::ops::Deref;
     use std::sync::{Arc, Mutex};
 
     #[test]
@@ -194,6 +193,7 @@ mod tests {
             .unwrap();
         assert!(service_key.onion_url.to_string().contains(".onion"));
 
+        #[derive(Clone)]
         struct Observer {
             pub count: Arc<Mutex<u16>>,
             // FIXME make this into a string and store data for assertions
@@ -217,33 +217,29 @@ mod tests {
         };
 
         let mut listner = HiddenServiceHandler::new(20000).unwrap();
-        let _ = listner.set_data_handler(obv).unwrap();
+        let _ = listner.set_data_handler(obv.clone()).unwrap();
         let _ = listner.start_http_listener();
 
-        ensure_runtime().lock().unwrap().block_on(
-            async move {
-                let client = utils::get_proxied_client(socks_port).unwrap();
-                let mut onion_url = utils::reqwest::Url::parse(&format!(
-                    "http://{}/my/path",
-                    service_key.onion_url
-                ))
-                .unwrap();
-                let _ = onion_url.set_port(Some(20011));
-
-                let resp = client
-                    .post(onion_url)
-                    .header("authorization", "secret-key")
-                    .body("secret p2p message")
-                    .send()
-                    .await
+        ensure_runtime().lock().unwrap().block_on(async move {
+            let client = utils::get_proxied_client(socks_port).unwrap();
+            let mut onion_url =
+                utils::reqwest::Url::parse(&format!("http://{}/my/path", service_key.onion_url))
                     .unwrap();
-                assert_eq!(resp.status(), 200);
-            }
-            .compat(),
-        );
+            let _ = onion_url.set_port(Some(20011));
 
-        // FIXME how to acces Arc Mutex vale for testing
-        // assert_eq!(obv.count.into_inner().unwrap(), 1);
+            let resp = client
+                .post(onion_url)
+                .header("authorization", "secret-key")
+                .body("secret p2p message")
+                .send()
+                .await
+                .unwrap();
+            assert_eq!(resp.status().as_u16(), 200);
+        });
+
+        // Accessing Arc Mutex value for testing
+        let count_value = *obv.count.lock().unwrap();
+        assert_eq!(count_value, 1);
 
         owned_node.shutdown().unwrap();
     }

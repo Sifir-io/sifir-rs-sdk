@@ -164,10 +164,7 @@ pub extern "C" fn create_hidden_service(
 
         match service.create_hidden_service(param) {
             Ok(result) => {
-                debug!(
-                    "Rust FFI: Hidden service created {:?} {}",
-                    result, service.control_port
-                );
+                debug!("Rust FFI: Hidden service created {} ", result.onion_url);
                 HiddenServiceResponse {
                     is_success: true,
                     onion_address: to_c_string(result.onion_url.to_string()),

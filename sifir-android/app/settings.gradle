@@ -1,2 +1,0 @@
-include ':tor'
-rootProject.name = "Sifir Android Sdk"

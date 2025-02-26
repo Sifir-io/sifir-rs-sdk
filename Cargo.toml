@@ -2,7 +2,7 @@
 
 [workspace]
 
-members = ["tor", "utils", "sifir-android", "sifir-ios", "logger"]
+members = ["tor", "utils", "logger"]
 
 resolver = "2"
 

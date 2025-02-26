@@ -23,7 +23,6 @@ use tokio_compat_02::FutureExt;
 use torut::control::{AsyncEvent, AuthenticatedConn, ConnError, UnauthenticatedConn};
 use torut::onion::TorSecretKeyV3;
 
-//type F = Box<dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>>;
 type F = Box<
     dyn Fn(AsyncEvent<'static>) -> Pin<Box<dyn Future<Output = Result<(), ConnError>>>>
         + Send
@@ -121,7 +120,7 @@ trait TorControlApi {
         &mut self,
         timeout_ms: Option<u64>,
     ) -> Pin<Box<dyn Future<Output = Result<bool, TorErrors>> + '_>>;
-    //fn shutdown(self);
+    fn shutdown(self);
     fn get_status(
         &mut self,
     ) -> Pin<Box<dyn Future<Output = Result<OwnedTorServiceBootstrapPhase, TorErrors>> + '_>>;
@@ -487,7 +486,7 @@ where
     }
     // dropping the control connection after having taken ownership of the node will cause the node
     // to shutdown
-    //fn shutdown(self) {}
+    fn shutdown(self) {}
 }
 
 #[cfg(test)]
@@ -501,7 +500,7 @@ mod tests {
     #[test]
     #[serial(tor)]
     fn from_param_and_await_boostrap() {
-        (*RUNTIME).lock().unwrap().block_on(
+        ensure_runtime().lock().unwrap().block_on(
             async {
                 let service: TorService = TorServiceParam {
                     socks_port: Some(19051),
@@ -535,7 +534,7 @@ mod tests {
     #[test]
     #[serial(tor)]
     fn bootstrap_timeout() {
-        (*RUNTIME).lock().unwrap().block_on(
+        ensure_runtime().lock().unwrap().block_on(
             async {
                 let service: TorService = TorServiceParam {
                     socks_port: Some(19051),
@@ -569,7 +568,7 @@ mod tests {
 
         let mut owned_node = service.into_owned_node().unwrap();
 
-        (*RUNTIME).lock().unwrap().block_on(
+        ensure_runtime().lock().unwrap().block_on(
             async {
                 let resp = client
                     .get("http://keybase5wmilwokqirssclfnsqrjdsi7jdir5wy7y7iu3tanwmtp6oid.onion")
@@ -634,7 +633,7 @@ mod tests {
         assert!(service_key.onion_url.to_string().contains(".onion"));
 
         // Spawn a lsner to our request and respond with 200
-        let _handle = (*RUNTIME).lock().unwrap().spawn(async {
+        let _handle = ensure_runtime().lock().unwrap().spawn(async {
             let listener = TcpListener::bind("127.0.0.1:20000").unwrap();
             for stream in listener.incoming() {
                 let mut stream = stream.unwrap();
@@ -648,7 +647,7 @@ mod tests {
             utils::reqwest::Url::parse(&format!("http://{}", service_key.onion_url)).unwrap();
         let _ = onion_url.set_port(Some(20011 as u16));
 
-        (*RUNTIME).lock().unwrap().block_on(
+        ensure_runtime().lock().unwrap().block_on(
             async {
                 let resp = client.get(onion_url).send().await.unwrap();
                 assert_eq!(resp.status(), 200);

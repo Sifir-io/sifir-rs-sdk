@@ -166,9 +166,9 @@ mod tests {
     use super::*;
     use crate::{TorService, TorServiceParam};
     use serial_test::serial;
-    use std::borrow::{Borrow, BorrowMut};
+
     use std::convert::TryInto;
-    use std::ops::Deref;
+
     use std::sync::{Arc, Mutex};
 
     #[test]
@@ -281,7 +281,7 @@ mod tests {
         let obv = Observer {
             count: count.clone(),
         };
-        tcp_com.set_data_handler(obv);
+        let _ = tcp_com.set_data_handler(obv);
         tcp_com.send_data(msg.into(), None).unwrap();
         tcp_com.send_data(msg.into(), None).unwrap();
         tcp_com.send_data(msg.into(), None).unwrap();
@@ -290,7 +290,7 @@ mod tests {
             if x > 6 {
                 break;
             }
-            let size = tcp_com.read_line_async().unwrap();
+            let _ = tcp_com.read_line_async().unwrap();
             println!("Read {}", x);
             tcp_com.send_data(msg.into(), None).unwrap();
             x = x + 1;

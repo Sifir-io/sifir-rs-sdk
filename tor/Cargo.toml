@@ -32,12 +32,8 @@ utils = { path = "../utils" }
 [build-dependencies]
 cbindgen = "0.24.0"
 
-[[example]]
-name = "hs_bind"
-
 [lib]
-crate-type = ["staticlib", "cdylib"]
-
+crate-type = ["staticlib"]
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.19.0"  # Only if you need JNI functionality
