@@ -1,13 +1,18 @@
 fn main() {
-    cxx_build::bridge("src/ffi.rs")
-        .flag_if_supported("-std=c++14")
-        .flag_if_supported("-fexceptions") // Enable exceptions
-        .flag_if_supported("-frtti") // Enable RTTI
-        .flag_if_supported("-fPIC") // Position Independent Code for dynamic libs
-        .shared_flag(true) // Enable shared library building
-        .compile("cxxbridge1");
+    let crate_dir = std::env::var("CARGO_MANIFEST_DIR").unwrap();
+
+    // Generate C/C++ headers
+    cbindgen::Builder::new()
+        .with_crate(crate_dir)
+        .with_config(
+            cbindgen::Config::from_file("cbindgen.toml").expect("Failed to load cbindgen.toml"),
+        )
+        .generate()
+        .expect("Unable to generate bindings")
+        .write_to_file("tor_ffi.h");
 
     println!("cargo:rerun-if-changed=src/ffi.rs");
     println!("cargo:rerun-if-changed=src/lib.rs");
+    println!("cargo:rerun-if-changed=cbindgen.toml");
     println!("cargo:rustc-link-lib=tor");
 }

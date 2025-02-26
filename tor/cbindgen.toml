@@ -1,0 +1,23 @@
+language = "C++"
+namespace = "tor"
+include_guard = "TOR_FFI_H"
+style = "both"
+tab_width = 2
+documentation = true
+cpp_compat = true
+
+[parse]
+parse_deps = false
+include = ["tor"]
+
+[export]
+prefix = "TOR_"
+include = ["HiddenServiceResponse", "StartTorResponse"]
+
+[defines]
+"target_os = android" = "ANDROID"
+"target_os = ios" = "IOS"
+"target_os = macos" = "MACOS"
+
+[enum]
+rename_variants = "ScreamingSnakeCase"
