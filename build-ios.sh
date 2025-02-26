@@ -26,8 +26,6 @@ rustup target add \
 TARGET_DIR="target/ios"
 MANIFEST_PATH="./tor/Cargo.toml"
 BINARY_NAME="libtor.a"
-CXX_BINARY_PATH_IOS="target/ios/aarch64-apple-ios/release/build/cxx-d1bd1d29a6dcc11a/out/libcxxbridge1.a"
-CXX_BINARY_PATH_IOS_SIM="target/ios/aarch64-apple-ios-sim/release/build/cxx-f28d8b7ce9bb5b34/out/libcxxbridge1.a"
 
 mkdir -p $TARGET_DIR
 
@@ -66,10 +64,3 @@ xcodebuild -create-xcframework \
   -headers $HEADERS_DIR_IOS_SIM \
   -output target/ios/Tor.xcframework
 
-# Create XCFramework for the cxxbridge library
-xcodebuild -create-xcframework \
-  -library $CXX_BINARY_PATH_IOS \
-  -headers $HEADERS_DIR_IOS \
-  -library $CXX_BINARY_PATH_IOS_SIM \
-  -headers $HEADERS_DIR_IOS_SIM \
-  -output target/ios/TorCxxBridge.xcframework

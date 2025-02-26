@@ -38,7 +38,7 @@ cxx-build = "1.0"
 name = "hs_bind"
 
 [lib]
-crate-type = ["staticlib"]
+crate-type = ["staticlib", "cdylib"]
 
 
 # Add these profile configurations
